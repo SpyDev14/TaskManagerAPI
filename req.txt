@@ -1,0 +1,12 @@
+django
+django.test
+django.filter
+django-cleanup
+djangorestframework
+djangorestframework-simplejwt
+django-debug-toolbar
+django-debug-toolbar-force
+Pillow
+dotenv
+psycopg2
+coverage
