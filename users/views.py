@@ -85,39 +85,6 @@ class RegisterView(generics.CreateAPIView):
 		return response
 
 
-class LoginView(generics.GenericAPIView):
-	serializer_class = UserLoginSerializer
-	permission_classes = []
-
-	def post(self, request: Request):
-		# Иначе аннотация не работает, IDE сумасшедшая дура, к сожалению
-		def get_serializer(*, data) -> UserLoginSerializer:
-			return self.get_serializer(data = data)
-		
-		serializer = get_serializer(data = request.data)
-		serializer.is_valid(raise_exception = True)
-
-		user: User | None = authenticate(
-			request,
-			username = serializer.validated_data['username'],
-			password = serializer.validated_data['password'],
-		)
-		
-		if not user:
-			return Response(
-				{'detail': 'Invalid credentials'},
-				status = status.HTTP_401_UNAUTHORIZED
-			)
-
-		refresh = RefreshToken.for_user(user)
-			
-		response = Response()
-		
-		_add_tokens_to_response_cookies(response, refresh)
-
-		return response
-
-
 class LogoutView(views.APIView):
 	permission_classes = [IsAuthenticated]
 
