@@ -13,6 +13,7 @@ class User(AbstractUser):
 		choices = Role.choices,
 		default = Role.REGULAR_USER
 	)
+	# сейчас это поле уже практически не нужно
 	email = models.EmailField(unique = True, null = True, blank = True)
 
 

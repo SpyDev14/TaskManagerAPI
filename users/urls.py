@@ -1,9 +1,11 @@
 from django.urls import path
-from .views import LoginView, RegisterView
+
+from users import views
 
 
 urlpatterns = [
-    path('api/register/', RegisterView.as_view(), name = 'api-register'),
-	# path('api/logout/',   ...,                  name = 'api-logout'),
-    path('api/login/',    LoginView.as_view(),    name = 'api-login'),
+    path('api/register/', views.RegisterView.as_view(), name = 'register'),
+	path('api/logout/',   views.LogoutView.as_view(),   name = 'logout'),
+    path('api/token/',         views.CookieTokenObtainPairView.as_view(), name = 'token-obtain_pair'),
+    path('api/token/refresh/', views.CookieTokenRefreshView.as_view(),    name = 'token-refresh'),
 ]

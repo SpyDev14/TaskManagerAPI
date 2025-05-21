@@ -12,12 +12,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 			'username',
 			'password',
 			'email',
-			'role',
 		)
-		extra_kwargs = {
-			'email': { 'required': False },
-			'role':  { 'required': False },
-		}
 
 	def create(self, validated_data):
 		validated_data['password'] = make_password(validated_data['password'])
@@ -27,5 +22,3 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 class UserLoginSerializer(serializers.Serializer):
 	username = serializers.CharField()
 	password = serializers.CharField(write_only = True)
-
-	

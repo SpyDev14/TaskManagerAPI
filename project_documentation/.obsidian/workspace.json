@@ -8,7 +8,7 @@
         "type": "tabs",
         "children": [
           {
-            "id": "870237f4bf2c2b9a",
+            "id": "00f200ddbc2dbf1f",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -167,11 +167,11 @@
       "command-palette:Открыть палитру команд": false
     }
   },
-  "active": "870237f4bf2c2b9a",
+  "active": "00f200ddbc2dbf1f",
   "lastOpenFiles": [
-    "Pasted image 20250519120906.png",
-    "Без названия.md",
+    "Заметки.md",
     "Technical order.md",
+    "Pasted image 20250519120906.png",
     "Без названия 1.md",
     "Без названия 2.md"
   ]
