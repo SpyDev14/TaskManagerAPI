@@ -3,14 +3,15 @@ from django.conf                     import settings
 from django.http.request             import HttpRequest
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.views  import TokenObtainPairView, TokenRefreshView
-from rest_framework.permissions      import IsAuthenticated
+from rest_framework.permissions      import IsAuthenticatedOrReadOnly
 from rest_framework.response         import Response
 from rest_framework.request          import Request
 from rest_framework                  import generics, status, views
 
-from .serializers import UserLoginSerializer, UserRegisterSerializer
-from .models import User
-from . import settings as local_settings
+from users.serializers import UserRegisterSerializer
+from users.permissinos import IsAnonymousOrReadOnly
+from users.models      import User
+from users             import settings as local_settings
 
 
 # В аргументы всех View всегда передаётся объект Request из DRF, а там
@@ -58,7 +59,7 @@ def _add_tokens_to_response_cookies(response: Response, refresh: RefreshToken) -
 class RegisterView(generics.CreateAPIView):
 	queryset = User.objects.all()
 	serializer_class = UserRegisterSerializer
-	permission_classes = []
+	permission_classes = [IsAnonymousOrReadOnly]
 
 	def create(self, request: Request, *args, **kwargs):
 		# Иначе аннотация не работает, IDE сошла с ума, к сожалению
@@ -86,7 +87,7 @@ class RegisterView(generics.CreateAPIView):
 
 
 class LogoutView(views.APIView):
-	permission_classes = [IsAuthenticated]
+	permission_classes = [IsAuthenticatedOrReadOnly]
 
 	def post(self, request: Request):
 		user: User = request.user
@@ -120,9 +121,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
 			refresh_token = raw_refresh_token,
 		)
 
-		del response.data['access']
-		del response.data['refresh']
-
+		response.data = None
 		return response
 	
 
@@ -142,6 +141,5 @@ class CookieTokenRefreshView(TokenRefreshView):
 		access_token = response.data['access']
 		_add_access_token_to_response_cookies_from_str(response, access_token)
 
-		del response.data['access']
-
+		response.data = None
 		return response

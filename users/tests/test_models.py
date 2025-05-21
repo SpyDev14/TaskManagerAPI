@@ -1,12 +1,23 @@
 from django.test  import TestCase
-from tasks.models import User
+from users.models import User
 
 
 
 class UserModelTest(TestCase):
-	def test_role_names_consistency(self):
-		# тут должна была быть проверка на соответствие значений и названия роли :(
-		#   - проверка: ROLE_NAME = ('role_name', 'Role Name')
-		# сейчас это какой-то очень странный тест, возможно потом удалю
+	def test_field_and_role_name_consistency(self):
+		"""
+		Проверка соответствтвия: `ROLE_NAME = ('role_name', ...)`
+		"""
 		for role_name, role_choise_name in User.Role.choices:
-			self.assertEqual(role_name.replace('_', ' ').title(), role_choise_name)
+			self.assertTrue(hasattr(User.Role, role_name.upper()),
+			   f'inconsistency role name: for the current name, the field should be named as "{role_name.upper()}"'
+			)
+
+	def test_role_name_and_verbose_role_name_consistency(self):
+		"""
+		Проверка соответствтвия: `... = ('role_name', 'Role Name')`
+		"""
+		for role_name, role_choise_name in User.Role.choices:
+			self.assertEqual(role_choise_name, role_name.replace('_', ' ').title(),
+				f'inconsistency role verbose name: verbose name must be a \'{role_name.replace('_', ' ').title()}\''
+			)
