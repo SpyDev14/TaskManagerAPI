@@ -8,5 +8,5 @@ class Task(models.Model):
 	title        = models.CharField(max_length = 255)
 	description  = models.TextField(max_length = 8_190, null = True, blank = True)
 	is_completed = models.BooleanField(default = False)
-	created_at   = models.DateTimeField(default = timezone.now)
+	created_at   = models.DateTimeField(auto_now_add = True)
 	attachment   = models.FileField(null = True, blank = True, upload_to = 'files/')

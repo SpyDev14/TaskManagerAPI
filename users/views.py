@@ -120,6 +120,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
 			access_token  = raw_access_token,
 			refresh_token = raw_refresh_token,
 		)
+		
 
 		response.data = None
 		return response
@@ -136,7 +137,7 @@ class CookieTokenRefreshView(TokenRefreshView):
 
 		if not response.status_code == status.HTTP_200_OK:
 			return response
-		
+
 
 		access_token = response.data['access']
 		_add_access_token_to_response_cookies_from_str(response, access_token)

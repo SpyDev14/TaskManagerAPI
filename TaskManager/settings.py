@@ -50,6 +50,7 @@ INSTALLED_APPS = [
 
     # Other
 	'debug_toolbar',
+	'rest_framework_simplejwt.token_blacklist',
 
     # This project
 	'users',
@@ -156,21 +157,21 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # MARK: Rest framework
 REST_FRAMEWORK = {
-    'DEFAULT_RENDERER_CLASSES': (
-        'rest_framework.renderers.JSONRenderer',
-    ),
+    # 'DEFAULT_RENDERER_CLASSES': (
+    #     'rest_framework.renderers.JSONRenderer',
+    # ),
     'DEFAULT_PARSER_CLASSES': (
         'rest_framework.parsers.JSONParser',
     ),
 	'DEFAULT_AUTHENTICATION_CLASSES': (
-        'users.authenticators.JWTFromCookiesAuthentication',
-    ),
+		'users.authenticators.JWTFromCookiesAuthentication',
+	),
 }
 
 SIMPLE_JWT = {
-    'ROTATE_REFRESH_TOKENS': True,
+    'ROTATE_REFRESH_TOKENS':    True,
     'BLACKLIST_AFTER_ROTATION': True,
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes = 15),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days = 7),
-    'SIGNING_KEY': SECRET_KEY,
+    'ACCESS_TOKEN_LIFETIME':    timedelta(minutes = 15),
+    'REFRESH_TOKEN_LIFETIME':   timedelta(days = 7),
+    'SIGNING_KEY':              SECRET_KEY,
 }

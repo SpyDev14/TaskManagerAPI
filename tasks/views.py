@@ -1,11 +1,4 @@
-from django.db.models              import QuerySet 
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.permissions    import IsAuthenticated
-from rest_framework.viewsets       import ModelViewSet, GenericViewSet
-from rest_framework.response       import Response
-from rest_framework.filters        import SearchFilter, OrderingFilter
-from rest_framework.request        import Request
-from rest_framework                import mixins
+from rest_framework.viewsets       import ModelViewSet
 
 from tasks.models import Task
 from tasks.serializers import TaskSerializer
@@ -19,3 +12,4 @@ class TaskViewSet(ModelViewSet):
 
 	def perform_create(self, serializer: TaskSerializer):
 		serializer.validated_data['created_by'] = self.request.user
+		serializer.save()

@@ -21,3 +21,19 @@ class UserModelTest(TestCase):
 			self.assertEqual(role_choise_name, role_name.replace('_', ' ').title(),
 				f'inconsistency role verbose name: verbose name must be a \'{role_name.replace('_', ' ').title()}\''
 			)
+
+
+	def test_password_hasing_on_creating(self):
+		user_wrong = User.objects.create(
+			username = 'StupidOleg',
+			password = '12345'
+		)
+
+		self.assertEqual(user_wrong.password, '12345')
+
+		user = User.objects.create_user(
+			username = 'Oleg',
+			password = '12345'
+		)
+
+		self.assertNotEqual(user.password, '12345')

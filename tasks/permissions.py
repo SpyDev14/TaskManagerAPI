@@ -7,6 +7,7 @@ from tasks.models import Task
 
 class IsAuthenticatedAndIsReadOnlyOrOwnerOrProjectManagerOrStaff(IsAuthenticated):
 	def has_object_permission(self, request: HttpRequest, view, obj: Task):
+
 		return bool (
 			super().has_object_permission(request, view, obj) and
 			bool(

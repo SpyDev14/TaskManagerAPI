@@ -25,7 +25,7 @@ from django.urls      import reverse
 
 urlpatterns = [
     path('admin/', admin.site.urls, name = 'admin_panel'),
-    path('', lambda _: redirect(reverse('admin_panel')), name = 'home_page'),
+    path('', lambda _: redirect('admin/'), name = 'home_page'),
 	path('', include('tasks.urls')),
 	path('', include('users.urls')),
 ] + debug_toolbar_urls() + static(settings.MEDIA_URL, document_root = settings.MEDIA_ROOT)
