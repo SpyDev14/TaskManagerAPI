@@ -1,3 +1,4 @@
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework              import serializers
 from django.contrib.auth.hashers import make_password
 
