@@ -2,7 +2,7 @@ from django.contrib.auth.admin import UserAdmin
 from django.utils.translation import gettext_lazy as loc
 from django.contrib            import admin
 
-from . import models
+from users import models
 
 
 class CustomUserAdmin(UserAdmin):

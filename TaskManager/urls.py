@@ -19,20 +19,18 @@ from debug_toolbar.toolbar          import debug_toolbar_urls
 from django.contrib                 import admin
 from django.urls                    import path, include
 from django.conf                    import settings
-from django.shortcuts import redirect
-from django.urls      import reverse
+from django.shortcuts               import redirect
+from django.urls                    import reverse
 
 
 urlpatterns = [
     path('admin/', admin.site.urls, name = 'admin_panel'),
-    path('', lambda _: redirect('admin/'), name = 'home_page'),
+    path('', lambda _: redirect('api/'), name = 'home_page'),
 	path('', include('tasks.urls')),
 	path('', include('users.urls')),
-] 
+] + debug_toolbar_urls()
 
 
-urlpatterns += [
-	debug_toolbar_urls(),
-	static(settings.STATIC_URL, document_root = settings.STATIC_ROOT),
-	static(settings.MEDIA_URL, document_root = settings.MEDIA_ROOT)
-]
+if settings.DEBUG:
+	urlpatterns += static(f'api/{settings.STATIC_URL}', document_root = settings.STATIC_ROOT)
+	urlpatterns += static(f'api/{settings.MEDIA_URL}', document_root = settings.MEDIA_ROOT)

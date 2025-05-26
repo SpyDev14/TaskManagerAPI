@@ -9,10 +9,10 @@ from rest_framework.response         import Response
 from rest_framework.request          import Request
 from rest_framework                  import generics, status, views
 
-from users.serializers import UserRegisterSerializer
+from users.serializers import UserRegisterSerializer, CookieTokenRefreshSerializer
 from users.permissinos import IsAnonymousOrReadOnly
 from users.models      import User
-from users             import settings as local_settings
+from users             import local_settings
 
 
 # В аргументы всех View всегда передаётся объект Request из DRF,
@@ -85,8 +85,12 @@ class RegisterView(generics.CreateAPIView):
 
 
 class LogoutView(views.APIView):
-	description = "Waits for access and refresh in cookies." \
-		" Deletes them from cookies and blacklists them on the server."
+	# description = \
+	# 	f"It waits for `{local_settings.ACCESS_TOKEN_COOKIE_NAME}`"\
+	# 	f" and `{local_settings.REFRESH_TOKEN_COOKIE_NAME}` in cookies,"\
+	# 		" and then deletes them from cookies in response and"\
+	# 		" blacklists them on the server. Does not return body."
+	
 	permission_classes = [IsAuthenticatedOrReadOnly]
 
 	def post(self, request: Request | HttpRequest):
@@ -124,31 +128,16 @@ class CookieTokenObtainPairView(TokenObtainPairView):
 	
 
 class CookieTokenRefreshView(TokenRefreshView):
+	serializer_class = CookieTokenRefreshSerializer
+	description = \
+		f"Waits for `refresh` in the `{local_settings.REFRESH_TOKEN_COOKIE_NAME}` cookie and," \
+		f" on success, sets a new `{local_settings.ACCESS_TOKEN_COOKIE_NAME}`" \
+		f" and `{local_settings.REFRESH_TOKEN_COOKIE_NAME}`" \
+		 " in the HttpOnly, Secure, this only SameSite, cookies." \
+		 " Does not return body"
+
 	def post(self, request: Request | HttpRequest):
-		# хрень какая-то, ещё и в options будет написано, что нужно через body
-		# тут либо разрешать через body (что нехорошо), либо вот так (что тоже не хорошо)
-		# а по хорошему вообще свой сериализатор сделать
-		if request.data and request.data.get('refresh'):
-			return Response(
-				data = {
-					'detail': loc('Do not send refresh via body, refresh should be sent via cookies.')
-				},
-				content_type = 'application/json',
-				status = status.HTTP_400_BAD_REQUEST
-			)
-
-		raw_refresh_token_from_request_cookies: str = \
-			request.COOKIES.get(local_settings.REFRESH_TOKEN_COOKIE_NAME)
-
-		if raw_refresh_token_from_request_cookies:
-			request.data['refresh'] = raw_refresh_token_from_request_cookies
-
-		# тоже вызывает исключение при неверных данных
-		# но клиенту он заявит, что нет "refresh" в body,
-		# а не что-то другое что, ну наверное, не нормально
 		response = super().post(request)
-
-		assert response.data['refresh'] != raw_refresh_token_from_request_cookies
 
 		_add_tokens_to_response_cookies_from_raw_tokens(
 			response = response,
@@ -156,7 +145,6 @@ class CookieTokenRefreshView(TokenRefreshView):
 			refresh_token = response.data['refresh'],
 		)
 
-		response.data = None
-
+		assert response.data is None, str(response.data)
 
 		return response

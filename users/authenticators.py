@@ -1,7 +1,7 @@
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.http.request import HttpRequest
 
-from . import settings as local_settings
+from users import local_settings
 
 class JWTFromCookiesAuthentication(JWTAuthentication):
 	def authenticate(self, request: HttpRequest):
