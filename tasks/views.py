@@ -1,8 +1,8 @@
-from rest_framework.viewsets       import ModelViewSet
+from rest_framework.viewsets import ModelViewSet
 
-from tasks.models import Task
-from tasks.serializers import TaskSerializer
 from tasks.permissions import IsAuthenticatedAndIsReadOnlyOrOwnerOrProjectManagerOrStaff
+from tasks.serializers import TaskSerializer
+from tasks.models      import Task
 
 
 class TaskViewSet(ModelViewSet):

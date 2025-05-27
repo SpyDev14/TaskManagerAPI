@@ -1,19 +1,21 @@
-from django.utils.translation        import gettext_lazy as loc
-from django.contrib.auth             import authenticate
-from django.conf                     import settings
-from django.http.request             import HttpRequest
-from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
-from rest_framework_simplejwt.views  import TokenObtainPairView, TokenRefreshView
-from rest_framework.permissions      import IsAuthenticatedOrReadOnly
-from rest_framework.response         import Response
-from rest_framework.request          import Request
-from rest_framework                  import generics, status, views
+from django.utils.translation            import gettext_lazy as loc
+from django.contrib.auth                 import authenticate, get_user_model
+from django.conf                         import settings
+from django.http.request                 import HttpRequest
+from rest_framework.permissions          import IsAuthenticatedOrReadOnly
+from rest_framework.response             import Response
+from rest_framework.request              import Request
+from rest_framework                      import generics, status, views
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.tokens     import RefreshToken, AccessToken
+from rest_framework_simplejwt.views      import TokenObtainPairView, TokenRefreshView
 
 from users.serializers import UserRegisterSerializer, CookieTokenRefreshSerializer
 from users.permissinos import IsAnonymousOrReadOnly
-from users.models      import User
+from users.models      import User as _User # Для аннотации
 from users             import local_settings
 
+User: type[_User] = get_user_model()
 
 # В аргументы всех View всегда передаётся объект Request из DRF,
 # но в аннотации везде указанно `Request (из DRF) | HttpRequest (из django)`
@@ -58,16 +60,16 @@ class RegisterView(generics.CreateAPIView):
 	serializer_class = UserRegisterSerializer
 	permission_classes = [IsAnonymousOrReadOnly]
 
+
+	# Для работы аннотации в глупой IDE          ∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨
+	def get_serializer(self, *args, **kwargs) -> UserRegisterSerializer:
+		return super().get_serializer(*args, **kwargs)
+
 	def create(self, request: Request | HttpRequest, *args, **kwargs):
-		# Это для работы аннотации, IDE сошла с ума, к сожалению
-		# Можно убрать, но читаемость кода важнее
-		def self_get_serializer(*, data) -> UserRegisterSerializer:
-			return self.get_serializer(data = data)
-		
-		serializer = self_get_serializer(data = request.data); del self_get_serializer
+		serializer = self.get_serializer(data = request.data)
 		serializer.is_valid(raise_exception = True)
 
-		user: User = serializer.save()
+		user: _User = serializer.save()
 
 		refresh = RefreshToken.for_user(user)
 
@@ -90,11 +92,11 @@ class LogoutView(views.APIView):
 	# 	f" and `{local_settings.REFRESH_TOKEN_COOKIE_NAME}` in cookies,"\
 	# 		" and then deletes them from cookies in response and"\
 	# 		" blacklists them on the server. Does not return body."
-	
+
 	permission_classes = [IsAuthenticatedOrReadOnly]
 
 	def post(self, request: Request | HttpRequest):
-		user: User = request.user
+		user: _User = request.user
 
 		refresh = RefreshToken.for_user(user)
 
@@ -105,12 +107,12 @@ class LogoutView(views.APIView):
 		response.delete_cookie(key = local_settings.REFRESH_TOKEN_COOKIE_NAME)
 
 		return response
-	
 
-# MARK: JWT Token Views
+
+# MARK: JWT-Token Views
 class CookieTokenObtainPairView(TokenObtainPairView):
 	def post(self, request: Request | HttpRequest):
-		
+
 		# При ошибке вызывает исключение
 		response = super().post(request)
 
@@ -125,10 +127,9 @@ class CookieTokenObtainPairView(TokenObtainPairView):
 
 		response.data = None
 		return response
-	
+
 
 class CookieTokenRefreshView(TokenRefreshView):
-	serializer_class = CookieTokenRefreshSerializer
 	description = \
 		f"Waits for `refresh` in the `{local_settings.REFRESH_TOKEN_COOKIE_NAME}` cookie and," \
 		f" on success, sets a new `{local_settings.ACCESS_TOKEN_COOKIE_NAME}`" \
@@ -136,13 +137,29 @@ class CookieTokenRefreshView(TokenRefreshView):
 		 " in the HttpOnly, Secure, this only SameSite, cookies." \
 		 " Does not return body"
 
+	# Для работы аннотации в глупой IDE и добавляет пустую data
+	def get_serializer(self, *args, **kwargs) -> CookieTokenRefreshSerializer:
+		return super().get_serializer(data = {}, *args, **kwargs)
+
 	def post(self, request: Request | HttpRequest):
-		response = super().post(request)
+		# Request по умолчанию идёт в context
+		# от куда он берёт cookie из которых он уже
+		# берёт refresh_token
+		serializer = self.get_serializer()
+
+		# < Скопировано из super().post() >
+		try:
+			serializer.is_valid(raise_exception = True)
+		except TokenError as e:
+			raise InvalidToken(e.args[0])
+		# </>
+
+		response = Response(status = status.HTTP_200_OK)
 
 		_add_tokens_to_response_cookies_from_raw_tokens(
 			response = response,
-			access_token = response.data['access'],
-			refresh_token = response.data['refresh'],
+			access_token = serializer.validated_data['access'],
+			refresh_token = serializer.validated_data['refresh'],
 		)
 
 		assert response.data is None, str(response.data)

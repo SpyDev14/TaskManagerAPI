@@ -25,6 +25,6 @@
 - `attachment (файл)`
 - `created_by`
  
-#### API root (/api/)
+#### API root (/api/) ✅
 возвращает ссылки на основные эндпоинты и на статику/медиа
 ![[Pasted image 20250519120906.png]]
