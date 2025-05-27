@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Заметки.md",
+                "file": "Technical order.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Заметки"
+              "title": "Technical order"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "Заметки.md",
+                "file": "Technical order.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Обратные ссылки для Заметки"
+              "title": "Обратные ссылки для Technical order"
             }
           },
           {
@@ -169,8 +169,8 @@
   },
   "active": "00f200ddbc2dbf1f",
   "lastOpenFiles": [
-    "Technical order.md",
     "Заметки.md",
+    "Technical order.md",
     "Pasted image 20250526101453.png",
     "Pasted image 20250526101316.png",
     "Pasted image 20250522100310.png",

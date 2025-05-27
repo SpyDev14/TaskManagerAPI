@@ -116,13 +116,15 @@ AUTH_PASSWORD_VALIDATORS = [
 	{ 'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', },
 	{ 'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator', },
 	{ 'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator', },
+
+	# { 'NAME': 'users.validators.NoInvisibleCharsAroundTheEdgesValidator' },
 ]
 
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'ru-ru'
+LANGUAGE_CODE = 'ru'
 
 TIME_ZONE = 'Europe/Samara'
 
@@ -130,6 +132,11 @@ USE_I18N = True
 
 USE_TZ = True
 
+LANGUAGES = [
+    ('en', 'English'),
+    ('ru', 'Russian'),
+]
+LOCALE_PATHS = [BASE_DIR / 'locale']
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
@@ -160,7 +167,7 @@ SIMPLE_JWT = {
 	'ACCESS_TOKEN_LIFETIME':    timedelta(minutes = 15),
 	'REFRESH_TOKEN_LIFETIME':   timedelta(days = 7),
 	'TOKEN_REFRESH_SERIALIZER': 'users.serializers.CookieTokenRefreshSerializer',
-	
+
 	# Настройки для хранения токена в куках
 	'AUTH_COOKIE':			 'access_token',
 	'AUTH_COOKIE_REFRESH':   'refresh_token',

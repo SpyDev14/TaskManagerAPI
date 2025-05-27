@@ -1,8 +1,10 @@
-from rest_framework import serializers
+from django.contrib.auth import get_user_model
+from rest_framework      import serializers
 
 from tasks.models import Task
-from users.models import User
+from users.models import User as _User
 
+User: type[_User] = get_user_model()
 
 
 class TaskOwnerSerializer(serializers.ModelSerializer):

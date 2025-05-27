@@ -1,7 +1,7 @@
-from django.contrib.auth.models import AbstractUser
-from django.utils.translation import gettext_lazy as loc
 from django.contrib.auth.hashers import make_password
-from django.db import models
+from django.contrib.auth.models  import AbstractUser
+from django.utils.translation    import gettext_lazy as loc
+from django.db                   import models
 
 
 class User(AbstractUser):
@@ -20,5 +20,5 @@ class User(AbstractUser):
 	email = models.EmailField(blank = True, verbose_name = loc('Почта'))
 
 
-	def __str__(self) -> str:
+	def __str__(self) -> str: # спецметод типа get_<value_name>_display() для получения verbose_name
 		return f'{self.username} ({self.get_role_display()})'
