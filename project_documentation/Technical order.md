@@ -9,7 +9,7 @@
 	- `api/tasks/`: `[GET, POST]`
 	- `api/tasks/<pk>/`: `[GET, PUT, PATCH, DELETE]`
 	- `api/tasks/<pk>/comments/`: `[GET, POST]`
-	- `api/tasks/<pk>/comments/<pk>/`: `[PUT, PATCH, DELETE]`
+	- `api/tasks/<pk>/comments/<pk>/`: `[GET, PUT, PATCH, DELETE]`
 - **Авторизация**
 	- `api/token/`: `[POST]` `{username, password}`
 	- `api/token/refresh/`: `[POST]` `{refresh (в cookies)}`
@@ -21,7 +21,7 @@
 	- Изменяет только свои задачи✅
 	- Может оставлять комментарии только под своими задачами
 	- Может удалять только свои комментарии
-	- Имеет те
+	- Будучи назначенным на задачу имеет такие же права, как и создатель
 
 - **Project Manager**
 	- Видит все задачи✅

@@ -1,6 +1,7 @@
 from copy import copy
 
 from django.http.response import HttpResponse
+from django.db.models     import Q
 from django.urls          import reverse
 from rest_framework.test  import APITestCase
 from rest_framework       import status
@@ -13,14 +14,56 @@ from tasks.views       import TaskViewSet
 
 import json
 from rest_framework.response import Response
-def to_verbose_data(data) -> str:
-	if not data:
-		return '>Data is None'
-	
-	if isinstance(data, Response):
-		data = data.data
+def to_verbose_data(*args, **kwargs) -> str:
+	def make_header(title: str) -> str:
+		return f'\033[1;34m{title.title().replace('_', ' ')}:\033[0m'
 
-	return json.dumps(data, indent = 4, ensure_ascii = False)
+	def colorize_json_dumps_output(text: str) -> str:
+		return (
+			text.replace('"', '\033[1;33m"')
+				.replace('\033[1;33m":', '"\033[0m:')
+				.replace('\033[1;33m",', '"\033[0m,')
+				.replace('"\n', '"\033[0m\n')
+				.replace('"', '\'')
+		)
+
+	if not args and not kwargs:
+		return '> Data is None'
+
+	data_for_print: dict = {}
+
+	counter: int = 0
+	for arg in args:
+		value = arg
+
+		if isinstance(value, Response):
+			value = value.data
+
+		data = None
+		try:
+			data = colorize_json_dumps_output(json.dumps(value, indent = 4, ensure_ascii = False))
+		except:
+			data = repr(value)
+
+		data_for_print[make_header(f'Element {counter}')] = data
+		counter += 1
+
+	for key, value in kwargs.items():
+		data = None
+		try:
+			data = colorize_json_dumps_output(json.dumps(value, indent = 4, ensure_ascii = False))
+		except:
+			data = repr(value)
+
+		data_for_print[make_header(key)] = data
+
+	exit_string_parts: list[str] = []
+	for header, data in data_for_print.items():
+		exit_string_parts.append('\n')
+		exit_string_parts.append(header)
+		exit_string_parts.append(data)
+
+	return '\n'.join(exit_string_parts)
 
 class TaskAPITest(APITestCase):
 	client_class = CookieJWTDebugClient
@@ -29,12 +72,12 @@ class TaskAPITest(APITestCase):
 		self.user1 = User.objects.create(
 			username = 'RegularUser1',
 			password = '12345'
-		) 
+		)
 
 		self.user2 = User.objects.create(
 			username = 'RegularUser2',
 			password = '12345'
-		) 
+		)
 
 		self.pm_user = User.objects.create(
 			username = 'ProjectManager',
@@ -45,18 +88,21 @@ class TaskAPITest(APITestCase):
 
 		self.user1_task = Task.objects.create(
 			title = 'User1 TestTask1',
-			created_by = self.user1
+			created_by = self.user1,
+			priority = Task.Priority.MEDIUM,
 		)
 
-		
+
 		self.user2_task = Task.objects.create(
 			title = 'User2 TestTask1',
-			created_by = self.user2
+			created_by = self.user2,
+			priority = Task.Priority.LOW,
 		)
 
 		self.pm_user_task = Task.objects.create(
 			title = 'Project Manager Task',
-			created_by = self.pm_user
+			created_by = self.pm_user,
+			priority = Task.Priority.HIGH,
 		)
 
 		self.tasks_url = reverse('task-list')
@@ -64,29 +110,79 @@ class TaskAPITest(APITestCase):
 
 
 	def test_get(self):
-		expected_data = TaskSerializer(TaskViewSet.queryset, many = True).data
+		user = self.user1
+		user_task = self.user1_task
+		qs = TaskViewSet.queryset.filter(
+			Q(created_by = user) | Q(assigned_to = user)
+		)
+		expected_data = TaskSerializer(qs, many = True).data
 
+		# anonymous
 		response: HttpResponse = self.client.get(self.tasks_url)
 
 		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED, to_verbose_data(response.data))
 		self.assertNotEqual(response.data, expected_data)
 
-		self.client.force_login(self.user1)
+		self.client.force_login(user)
+
+		# regular user (его задачи)
+		response: HttpResponse = self.client.get(self.tasks_url)
+		self.assertEqual(response.status_code, status.HTTP_200_OK, to_verbose_data(response.data))
+		self.assertEqual(response.data, expected_data, to_verbose_data(
+			response_data = response.data,
+			expected_data = expected_data,
+			user = user,
+			user_task = user_task
+		))
+
+
+		expected_data = TaskSerializer(user_task).data
+
+		response: HttpResponse = self.client.get(self.get_task_detail_url(user_task.pk))
+		self.assertEqual(response.status_code, status.HTTP_200_OK, to_verbose_data(
+			response_data = response.data,
+			expected_data = expected_data,
+			user = user
+		))
+		self.assertEqual(response.data, expected_data, to_verbose_data(
+			response_data = response.data,
+			expected_data = expected_data,
+			user = user
+		))
+
+		# PM (все задачи)
+		user = self.pm_user
+		user_task = self.pm_user_task
+		self.client.force_login(user)
 
 		response: HttpResponse = self.client.get(self.tasks_url)
 		self.assertEqual(response.status_code, status.HTTP_200_OK, to_verbose_data(response.data))
-		self.assertEqual(response.data, expected_data)
+		self.assertEqual(response.data, expected_data, to_verbose_data(
+			response_data = response.data,
+			expected_data = expected_data,
+			user = user,
+			user_task = user_task
+		))
 
 
-		expected_data = TaskSerializer(self.user1_task).data
+		expected_data = TaskSerializer(user_task).data
 
-		response: HttpResponse = self.client.get(self.get_task_detail_url(self.user1_task.pk))
-		self.assertEqual(response.status_code, status.HTTP_200_OK, to_verbose_data(response.data))
-		self.assertEqual(response.data, expected_data)
+		response: HttpResponse = self.client.get(self.get_task_detail_url(user_task.pk))
+		self.assertEqual(response.status_code, status.HTTP_200_OK, to_verbose_data(
+			response_data = response.data,
+			expected_data = expected_data,
+			user = user
+		))
+		self.assertEqual(response.data, expected_data, to_verbose_data(
+			response_data = response.data,
+			expected_data = expected_data,
+			user = user
+		))
 
 	def test_creating(self):
 		data: dict = {
-			'title': 'Debug Post'
+			'title': 'Debug Post',
+			'priority': Task.Priority.LOW
 		}
 
 		params = {
@@ -122,7 +218,7 @@ class TaskAPITest(APITestCase):
 		data = {
 			'title': 'Changed Title',
 			'is_completed': True,
-			
+
 			'id': 199,
 			'created_by': self.user2.pk,
 		}
@@ -164,7 +260,7 @@ class TaskAPITest(APITestCase):
 		data = {
 			'title': 'Changed Title',
 			'is_completed': True,
-			
+
 			'id': 199,
 			'created_by': self.user2.pk,
 		}
@@ -206,7 +302,7 @@ class TaskAPITest(APITestCase):
 		data = {
 			'title': 'Changed Title',
 			'is_completed': True,
-			
+
 			'id': 199,
 			'created_by': self.user2.pk,
 		}
@@ -255,7 +351,7 @@ class TaskAPITest(APITestCase):
 		self.assertEqual(Task.objects.last(), task)
 
 		self.client.force_login(user)
-		
+
 		response = self.client.delete(self.get_task_detail_url(task.pk))
 
 		self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
@@ -276,7 +372,7 @@ class TaskAPITest(APITestCase):
 		self.assertEqual(Task.objects.last(), task)
 
 		self.client.force_login(user)
-		
+
 		response = self.client.delete(self.get_task_detail_url(task.pk))
 
 		self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, to_verbose_data(response.data))
@@ -297,7 +393,7 @@ class TaskAPITest(APITestCase):
 		self.assertEqual(Task.objects.last(), task)
 
 		self.client.force_login(user)
-		
+
 		response = self.client.delete(self.get_task_detail_url(task.pk))
 
 		self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, to_verbose_data(response.data))
