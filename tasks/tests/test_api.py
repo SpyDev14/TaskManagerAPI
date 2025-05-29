@@ -1,400 +1,456 @@
-from copy import copy
+from typing import Literal
+from copy   import copy
 
-from django.http.response import HttpResponse
-from django.db.models     import Q
-from django.urls          import reverse
-from rest_framework.test  import APITestCase
-from rest_framework       import status
-
-from users.tests.debug_client import CookieJWTDebugClient
-from users.models      import User
-from tasks.serializers import TaskSerializer
-from tasks.models      import Task
-from tasks.views       import TaskViewSet
-
-import json
+from django.http.response    import HttpResponse
+from django.contrib.auth     import get_user_model
+from django.db.models        import Q
+from django.urls             import reverse
 from rest_framework.response import Response
-def to_verbose_data(*args, **kwargs) -> str:
-	def make_header(title: str) -> str:
-		return f'\033[1;34m{title.title().replace('_', ' ')}:\033[0m'
+from rest_framework.test     import APITestCase
+from rest_framework          import status
 
-	def colorize_json_dumps_output(text: str) -> str:
-		return (
-			text.replace('"', '\033[1;33m"')
-				.replace('\033[1;33m":', '"\033[0m:')
-				.replace('\033[1;33m",', '"\033[0m,')
-				.replace('"\n', '"\033[0m\n')
-				.replace('"', '\'')
-		)
+from tasks.tests.utils import CookieJWTDebugClient, to_verbose_data, setUpBase
+from tasks.serializers import TaskSerializer
+from tasks.models      import Task, Comment
+from tasks.views       import TaskViewSet
+from users.models      import User as _User
 
-	if not args and not kwargs:
-		return '> Data is None'
+User: type[_User] = get_user_model()
 
-	data_for_print: dict = {}
 
-	counter: int = 0
-	for arg in args:
-		value = arg
-
-		if isinstance(value, Response):
-			value = value.data
-
-		data = None
-		try:
-			data = colorize_json_dumps_output(json.dumps(value, indent = 4, ensure_ascii = False))
-		except:
-			data = repr(value)
-
-		data_for_print[make_header(f'Element {counter}')] = data
-		counter += 1
-
-	for key, value in kwargs.items():
-		data = None
-		try:
-			data = colorize_json_dumps_output(json.dumps(value, indent = 4, ensure_ascii = False))
-		except:
-			data = repr(value)
-
-		data_for_print[make_header(key)] = data
-
-	exit_string_parts: list[str] = []
-	for header, data in data_for_print.items():
-		exit_string_parts.append('\n')
-		exit_string_parts.append(header)
-		exit_string_parts.append(data)
-
-	return '\n'.join(exit_string_parts)
 
 class TaskAPITest(APITestCase):
 	client_class = CookieJWTDebugClient
 
 	def setUp(self):
-		self.user1 = User.objects.create(
-			username = 'RegularUser1',
-			password = '12345'
-		)
+		users = [
+			User.objects.create(
+				username = f'Regular User {i}',
+				password = 'password12345',
+				role = User.Role.PROJECT_MANAGER,
+			) for i in range(1, 4) # 1, 2, 3
+		]
 
-		self.user2 = User.objects.create(
-			username = 'RegularUser2',
-			password = '12345'
-		)
 
-		self.pm_user = User.objects.create(
+		self.user_1 = users[0]
+		self.user_2 = users[1]
+		self.user_3 = users[2]
+
+		self.pm_user   = User.objects.create(
 			username = 'ProjectManager',
-			password = '12345',
-			role = User.Role.PROJECT_MANAGER
+			password = 'password12345',
+			role = User.Role.PROJECT_MANAGER,
+		)
+		self.superuser = User.objects.create(
+			username = 'Superuser',
+			password = 'password12345',
+			role = User.Role.REGULAR_USER,
+			is_staff = True,
+			is_superuser = True,
 		)
 
 
-		self.user1_task = Task.objects.create(
-			title = 'User1 TestTask1',
-			created_by = self.user1,
-			priority = Task.Priority.MEDIUM,
-		)
+		self.user_1_tasks: dict[Literal['Task 1', 'Task 2'], Task] = {
+			'Task 1': Task.objects.create(
+				created_by = self.user_1,
+				title      = 'Task 1',
+				priority   = Task.Priority.MEDIUM
+			),
+			'Task 2': Task.objects.create(
+				created_by = self.user_1,
+				title      = 'Task 2',
+				priority   = Task.Priority.LOW
+			),
+		}
+
+		self.user_2_tasks: dict[Literal['Task 1', 'Task 2'], Task] = {
+			'Task 1': Task.objects.create(
+				created_by = self.user_2,
+				title = 'Task 1',
+				priority = Task.Priority.MEDIUM
+			),
+			'Task 2': Task.objects.create(
+				created_by = self.user_2,
+				title = 'Task 2',
+				priority = Task.Priority.LOW
+			),
+		}
+
+		self.user_3_tasks: dict[Literal['Task 1'], Task] = {
+			'Task 1': Task.objects.create(
+				created_by = self.user_3,
+				title = 'Task 1',
+				priority = Task.Priority.HIGH
+			),
+		}
+
+		self.pm_user_tasks: dict[Literal[
+				'PM Task 1 for User2', 'PM Task 2 for User2',
+				'PM Task 1 for User3', 'PM Task 2 for User3', 'PM Task 3 for User3',
+				'PM Unassigned Task 1','PM Unassigned Task 2','PM Own Task 1'
+			], Task] = {
+
+			'PM Task 1 for User2':  Task.objects.create(
+				created_by = self.pm_user,
+				assigned_to = self.user_2,
+				title = 'PM Task 1 for User2',
+				priority = Task.Priority.MEDIUM,
+				is_completed = True,
+			),
+			'PM Task 2 for User2':  Task.objects.create(
+				created_by = self.pm_user,
+				assigned_to = self.user_2,
+				title = 'PM Task 2 for User2',
+				priority = Task.Priority.HIGH
+			),
+			'PM Task 1 for User3':  Task.objects.create(
+				created_by = self.pm_user,
+				assigned_to = self.user_3,
+				title = 'PM Task 1 for User3',
+				priority = Task.Priority.MEDIUM,
+			),
+			'PM Task 2 for User3':  Task.objects.create(
+				created_by = self.pm_user,
+				assigned_to = self.user_3,
+				title = 'PM Task 2 for User3',
+				priority = Task.Priority.LOW,
+			),
+			'PM Task 3 for User3':  Task.objects.create(
+				created_by = self.pm_user,
+				assigned_to = self.user_3,
+				title = 'PM Task 3 for User3',
+				priority = Task.Priority.HIGH,
+			),
+			'PM Unassigned Task 1': Task.objects.create(
+				created_by = self.pm_user,
+				title = 'PM Unassigned Task 1',
+				priority = Task.Priority.LOW,
+			),
+			'PM Unassigned Task 2': Task.objects.create(
+				created_by = self.pm_user,
+				title = 'PM Unassigned Task 2',
+				priority = Task.Priority.LOW,
+			),
+			'PM Own Task 1':        Task.objects.create(
+				created_by = self.pm_user,
+				assigned_to = self.pm_user,
+				title = 'PM Own Task 1',
+				priority = Task.Priority.HIGH,
+				is_completed = True,
+			),
+		}
+
+		self.superuser_tasks: dict[Literal['Superuser Task 1', 'Superuser Task for PM'], Task] = {
+			'Superuser Task 1': Task.objects.create(
+				created_by = self.superuser,
+				title = 'Superuser Task 1',
+				priority = Task.Priority.LOW
+			),
+			'Superuser Task for PM': Task.objects.create(
+				created_by = self.superuser,
+				assigned_to = self.pm_user,
+				title = 'Superuser Task for PM',
+				priority = Task.Priority.HIGH,
+			),
+		}
+
+		[ # comments
+			*[ # User 1 Tasks
+				*[ # Task 1
+					Comment.objects.create(
+						task = self.user_1_tasks['Task 1'],
+						created_by = self.user_1,
+						content = 'Debug Content 1',
+					),
+
+					Comment.objects.create(
+						task = self.user_1_tasks['Task 1'],
+						created_by = self.user_1,
+						content = 'Debug Content 2',
+					),
+
+					Comment.objects.create(
+						task = self.user_1_tasks['Task 1'],
+						created_by = self.pm_user,
+						content = 'Debug PM Content 1',
+					),
+				],
+
+				*[ ], # Task 2
+			],
+
+			*[ # User 2 Tasks
+				*[ ], # Task 1
+
+				*[ # Task 2
+					Comment.objects.create(
+						task = self.user_2_tasks['Task 2'],
+						created_by = self.user_2,
+						content = 'Debug Content 1',
+					),
+				],
+			],
+
+			*[ # User 3 Tasks
+				*[ ], # Task 1
+			],
+
+			*[ # PM Tasks
+				*[ ], # For User 1
+
+				*[ # For User 2
+					*[ ], # Task 1
+
+					*[ # Task 2
+						Comment.objects.create(
+							task = self.pm_user_tasks['PM Task 2 for User2'],
+							created_by = self.user_2,
+							content = 'Debug Content 1',
+						),
+
+						Comment.objects.create(
+							task = self.pm_user_tasks['PM Task 2 for User2'],
+							created_by = self.user_2,
+							content = 'Debug Content 2',
+						),
+
+						Comment.objects.create(
+							task = self.pm_user_tasks['PM Task 2 for User2'],
+							created_by = self.user_2,
+							content = 'Debug Content 3',
+						),
+					],
+				],
+
+				*[ # For User 3
+					*[ # Task 1
+						Comment.objects.create(
+							task = self.pm_user_tasks['PM Task 1 for User3'],
+							created_by = self.user_3,
+							content = 'Debug Content 1',
+						),
+
+						Comment.objects.create(
+							task = self.pm_user_tasks['PM Task 1 for User3'],
+							created_by = self.user_3,
+							content = 'Debug Content 2',
+						),
+					],
+
+					*[ ], # Task 2
+
+					*[ # Task 3
+						Comment.objects.create(
+							task = self.pm_user_tasks['PM Task 3 for User3'],
+							created_by = self.user_3,
+							content = 'Debug Content 1',
+						),
+					],
+				],
+
+				*[ # Unassigned
+					*[ # Task 1
+						Comment.objects.create(
+							task = self.pm_user_tasks['PM Unassigned Task 1'],
+							created_by = self.pm_user,
+							content = 'Debug PM Content 1',
+						),
+					],
+
+					*[ # Task 2
+						Comment.objects.create(
+							task = self.pm_user_tasks['PM Unassigned Task 2'],
+							created_by = self.pm_user,
+							content = 'Debug PM Content 1',
+						),
+
+						Comment.objects.create(
+							task = self.pm_user_tasks['PM Unassigned Task 2'],
+							created_by = self.pm_user,
+							content = 'Debug PM Content 2',
+						),
+					]
+
+				],
+
+				*[ # PM Own tasks
+					Comment.objects.create(
+						task = self.pm_user_tasks['PM Own Task 1'],
+						created_by = self.pm_user,
+						content = 'Debug PM Content 1',
+					),
+
+					Comment.objects.create(
+						task = self.pm_user_tasks['PM Own Task 1'],
+						created_by = self.pm_user,
+						content = 'Debug PM Content 2',
+					),
+
+					Comment.objects.create(
+						task = self.pm_user_tasks['PM Own Task 1'],
+						created_by = self.pm_user,
+						content = 'Debug PM Content 3',
+					),
+
+					Comment.objects.create(
+						task = self.pm_user_tasks['PM Own Task 1'],
+						created_by = self.pm_user,
+						content = 'Debug PM Content 4',
+					),
+				]
+			],
+
+			*[ # Superuser Tasks
+				*[ ], # Task 1
+
+				*[ # Task for PM
+					Comment.objects.create(
+						task = self.superuser_tasks['Superuser Task for PM'],
+						created_by = self.pm_user,
+						content = 'Debug PM Content 1',
+					),
+
+					Comment.objects.create(
+						task = self.superuser_tasks['Superuser Task for PM'],
+						created_by = self.superuser,
+						content = 'Debug Superuser Content 1',
+					),
+				],
+			],
+		]
 
 
-		self.user2_task = Task.objects.create(
-			title = 'User2 TestTask1',
-			created_by = self.user2,
-			priority = Task.Priority.LOW,
-		)
-
-		self.pm_user_task = Task.objects.create(
-			title = 'Project Manager Task',
-			created_by = self.pm_user,
-			priority = Task.Priority.HIGH,
-		)
-
-		self.tasks_url = reverse('task-list')
-		self.get_task_detail_url = lambda pk: reverse('task-detail', args = [pk])
+		self.tasks_list_url = reverse('task-list')
+		self.make_task_detail_url = lambda task_pk: reverse('task-detail', args = [task_pk])
+		self.make_comments_list_url = lambda task_pk: reverse('task-comments', args = [task_pk])
 
 
-	def test_get(self):
-		user = self.user1
-		user_task = self.user1_task
-		qs = TaskViewSet.queryset.filter(
-			Q(created_by = user) | Q(assigned_to = user)
-		)
-		expected_data = TaskSerializer(qs, many = True).data
 
-		# anonymous
-		response: HttpResponse = self.client.get(self.tasks_url)
+	def test_get_list_from_anonymous(self):
+		response: Response = self.client.get(self.tasks_list_url)
 
-		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED, to_verbose_data(response.data))
-		self.assertNotEqual(response.data, expected_data)
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+		self.assertIsNone(response.data)
 
+
+	def test_get_list_normal(self):
+		user = self.user_1
 		self.client.force_login(user)
 
-		# regular user (его задачи)
-		response: HttpResponse = self.client.get(self.tasks_url)
-		self.assertEqual(response.status_code, status.HTTP_200_OK, to_verbose_data(response.data))
-		self.assertEqual(response.data, expected_data, to_verbose_data(
-			response_data = response.data,
-			expected_data = expected_data,
-			user = user,
-			user_task = user_task
-		))
+		response: Response = self.client.get(self.tasks_list_url)
+
+		expected_data = TaskSerializer(
+			Task.objects.filter(Q(created_by = user) | Q(assigned_to = user)),
+			many = True
+		).data
 
 
-		expected_data = TaskSerializer(user_task).data
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data, expected_data,
+			to_verbose_data(response.data, expected_data, resp_n_expected_here=True))
+		
 
-		response: HttpResponse = self.client.get(self.get_task_detail_url(user_task.pk))
-		self.assertEqual(response.status_code, status.HTTP_200_OK, to_verbose_data(
-			response_data = response.data,
-			expected_data = expected_data,
-			user = user
-		))
-		self.assertEqual(response.data, expected_data, to_verbose_data(
-			response_data = response.data,
-			expected_data = expected_data,
-			user = user
-		))
-
-		# PM (все задачи)
+	def test_get_list_from_pm(self):
 		user = self.pm_user
-		user_task = self.pm_user_task
 		self.client.force_login(user)
 
-		response: HttpResponse = self.client.get(self.tasks_url)
-		self.assertEqual(response.status_code, status.HTTP_200_OK, to_verbose_data(response.data))
-		self.assertEqual(response.data, expected_data, to_verbose_data(
-			response_data = response.data,
-			expected_data = expected_data,
-			user = user,
-			user_task = user_task
-		))
+		response: Response = self.client.get(self.tasks_list_url)
+
+		expected_data = TaskSerializer(
+			Task.objects.all(),
+			many = True
+		).data
 
 
-		expected_data = TaskSerializer(user_task).data
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data, expected_data,
+			to_verbose_data(response, expected_data, resp_n_expected_here=True))
 
-		response: HttpResponse = self.client.get(self.get_task_detail_url(user_task.pk))
-		self.assertEqual(response.status_code, status.HTTP_200_OK, to_verbose_data(
-			response_data = response.data,
-			expected_data = expected_data,
-			user = user
-		))
-		self.assertEqual(response.data, expected_data, to_verbose_data(
-			response_data = response.data,
-			expected_data = expected_data,
-			user = user
-		))
+
+	def test_get_list_from_superuser(self):
+		user = self.superuser
+		self.client.force_login(user)
+
+		response: Response = self.client.get(self.tasks_list_url)
+
+		expected_data = TaskSerializer(
+			Task.objects.all(),
+			many = True
+		).data
+
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data, expected_data,
+			to_verbose_data(response, expected_data, resp_n_expected_here=True))
+
+
+	def test_get_list_with_ordering(self):
+		user = self.superuser
+		self.client.force_login(user)
+
+		url_query = {
+			'ordering': 'created_at', # сначала старые
+		}
+
+		response: Response = self.client.get(self.tasks_list_url, data = url_query, format = 'json')
+
+		expected_data = TaskSerializer(
+			Task.objects.order_by('created_at'),
+			many = True
+		).data
+
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data, expected_data,
+			to_verbose_data(response.data, expected_data, resp_n_expected_here=True))
+		
+
+	def test_get_list_with_filtering(self):
+		user = self.superuser
+		self.client.force_login(user)
+
+		url_query = {
+			'is_completed': False,
+			'priority': Task.Priority.HIGH,
+		}
+
+		response: Response = self.client.get(self.tasks_list_url, data = url_query, format = 'json')
+
+		expected_data = TaskSerializer(
+			Task.objects.filter(is_completed = False, priority = Task.Priority.HIGH),
+			many = True
+		).data
+
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data, expected_data,
+			to_verbose_data(response.data, expected_data, resp_n_expected_here=True))
+
+
+	def test_get_list_advanced_with_bad_data(self):
+		pass
+
+
+	def test_get_list_sql_efficiency(self):
+		pass
+
+
+	def test_get_detail(self):
+		pass
+
+
+
 
 	def test_creating(self):
-		data: dict = {
-			'title': 'Debug Post',
-			'priority': Task.Priority.LOW
-		}
+		pass
 
-		params = {
-			'path': self.tasks_url,
-			'data': data,
-			'content_type': 'application/json'
-		}
 
-		last = Task.objects.last()
-
-		response = self.client.post(**params)
-
-		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-		self.assertEqual(Task.objects.last(), last)
-
-		self.client.force_login(self.user1)
-
-		response = self.client.post(**params)
-		self.assertEqual(response.status_code, status.HTTP_201_CREATED, to_verbose_data(response.data))
-		self.assertNotEqual(Task.objects.last(), last)
-		self.assertEqual(Task.objects.last().created_by, self.user1)
-		self.assertEqual(TaskSerializer(Task.objects.last()).data, response.data, to_verbose_data(response.data))
+	def test_creating_with_wrong_data(self):
+		pass
 
 
 
-	def test_update_this_user_own(self):
-		user = self.user1
-		task = self.user1_task
-		old_task = copy(task)
-
-		assert task is not old_task
-
-		data = {
-			'title': 'Changed Title',
-			'is_completed': True,
-
-			'id': 199,
-			'created_by': self.user2.pk,
-		}
-
-		params = {
-			'path': self.get_task_detail_url(task.pk),
-			'data': data,
-			'content_type': 'application/json'
-		}
-
-		response = self.client.patch(**params)
-
-		task.refresh_from_db()
-		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-		self.assertEqual(TaskSerializer(task).data, TaskSerializer(old_task).data, to_verbose_data(response.data))
-		self.assertFalse(task.is_completed)
-
-		self.client.force_login(user)
+	def test_deleting(self):
+		pass
 
 
-		response = self.client.patch(**params)
-
-		task.refresh_from_db()
-		self.assertEqual(response.status_code, status.HTTP_200_OK, to_verbose_data(response.data))
-		self.assertEqual(response.data, TaskSerializer(task).data, to_verbose_data(response.data))
-		self.assertNotEqual(TaskSerializer(task).data, TaskSerializer(old_task).data, to_verbose_data(response.data))
-		self.assertEqual(task.title, 'Changed Title')
-		self.assertTrue(task.is_completed)
-		self.assertNotEqual(task.pk, 199)
-		self.assertNotEqual(task.created_by, self.user2)
-
-	def test_update_other_user_own(self):
-		user = self.user2
-		task = self.user1_task
-		old_task = copy(task)
-
-		assert task is not old_task
-
-		data = {
-			'title': 'Changed Title',
-			'is_completed': True,
-
-			'id': 199,
-			'created_by': self.user2.pk,
-		}
-
-		params = {
-			'path': self.get_task_detail_url(task.pk),
-			'data': data,
-			'content_type': 'application/json'
-		}
-
-		response = self.client.patch(**params)
-
-		task.refresh_from_db()
-		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED, to_verbose_data(response.data))
-		self.assertEqual(TaskSerializer(task).data, TaskSerializer(old_task).data, to_verbose_data(response.data))
-		self.assertFalse(task.is_completed)
-		self.assertNotEqual(task.pk, 199)
-		self.assertNotEqual(task.created_by, self.user2.pk)
-
-		self.client.force_login(user)
-
-		response = self.client.patch(**params)
-
-		task.refresh_from_db()
-		self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, to_verbose_data(response.data))
-		self.assertEqual(TaskSerializer(task).data, TaskSerializer(old_task).data, to_verbose_data(response.data))
-		self.assertFalse(task.is_completed)
-		self.assertNotEqual(task.pk, 199)
-		self.assertNotEqual(task.created_by, self.user2.pk)
-
-	def test_update_other_user_own_witn_manager(self):
-		user = self.pm_user
-		task = self.user1_task
-		old_task = copy(task)
-
-		assert task is not old_task
-		assert user.role == User.Role.PROJECT_MANAGER
-
-		data = {
-			'title': 'Changed Title',
-			'is_completed': True,
-
-			'id': 199,
-			'created_by': self.user2.pk,
-		}
-
-		params = {
-			'path': self.get_task_detail_url(task.pk),
-			'data': data,
-			'content_type': 'application/json'
-		}
-
-		response = self.client.patch(**params)
-
-		task.refresh_from_db()
-		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED, to_verbose_data(response.data))
-		self.assertEqual(TaskSerializer(task).data, TaskSerializer(old_task).data, to_verbose_data(response.data))
-		self.assertFalse(task.is_completed)
-
-		self.client.force_login(user)
-
-
-		response = self.client.patch(**params)
-
-		task.refresh_from_db()
-		self.assertEqual(response.status_code, status.HTTP_200_OK, to_verbose_data(response.data))
-		self.assertEqual(response.data, TaskSerializer(task).data, to_verbose_data(response.data))
-		self.assertNotEqual(TaskSerializer(task).data, TaskSerializer(old_task).data, to_verbose_data(response.data))
-		self.assertEqual(task.title, 'Changed Title')
-		self.assertTrue(task.is_completed)
-		self.assertNotEqual(task.pk, 199)
-		self.assertNotEqual(task.created_by, self.user2.pk)
-
-
-
-	def test_delete_this_user_own(self):
-		user = self.user2
-		task = Task.objects.create(
-			title = 'TASK FOR DELETE',
-			created_by = self.user2
-		)
-
-		assert Task.objects.last() == task
-
-		response = self.client.delete(self.get_task_detail_url(task.pk))
-
-		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED, to_verbose_data(response.data))
-		self.assertEqual(Task.objects.last(), task)
-
-		self.client.force_login(user)
-
-		response = self.client.delete(self.get_task_detail_url(task.pk))
-
-		self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-		self.assertNotEqual(Task.objects.last(), task)
-
-	def test_delete_other_user_own(self):
-		user = self.user1
-		task = Task.objects.create(
-			title = 'TASK FOR DELETE',
-			created_by = self.user2
-		)
-
-		assert Task.objects.last() == task
-
-		response = self.client.delete(self.get_task_detail_url(task.pk))
-
-		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED, to_verbose_data(response.data))
-		self.assertEqual(Task.objects.last(), task)
-
-		self.client.force_login(user)
-
-		response = self.client.delete(self.get_task_detail_url(task.pk))
-
-		self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, to_verbose_data(response.data))
-		self.assertEqual(Task.objects.last(), task)
-
-	def test_delete_other_user_own_witn_manager(self):
-		user = self.pm_user
-		task = Task.objects.create(
-			title = 'TASK FOR DELETE',
-			created_by = self.user2
-		)
-
-		assert Task.objects.last() == task
-
-		response = self.client.delete(self.get_task_detail_url(task.pk))
-
-		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED, to_verbose_data(response.data))
-		self.assertEqual(Task.objects.last(), task)
-
-		self.client.force_login(user)
-
-		response = self.client.delete(self.get_task_detail_url(task.pk))
-
-		self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, to_verbose_data(response.data))
-		self.assertNotEqual(Task.objects.last(), task)

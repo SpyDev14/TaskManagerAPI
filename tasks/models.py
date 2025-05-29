@@ -41,6 +41,9 @@ class Task(models.Model):
 		blank = True
 	)
 
+	class Meta:
+		ordering = ['-created_at']
+
 
 	def __str__(self) -> str:
 		return f'{self.title} - {self.created_by}'
@@ -52,3 +55,6 @@ class Comment(models.Model):
 
 	content    = models.TextField(max_length = 2_048)
 	created_at = models.DateTimeField(auto_now_add = True, editable = False)
+
+	class Meta:
+		ordering = ['-created_at']
