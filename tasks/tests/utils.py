@@ -22,7 +22,7 @@ class CookieJWTDebugClient(APIClient):
 		self.cookies[local_settings.REFRESH_TOKEN_COOKIE_NAME] = str(refresh)
 
 
-def to_verbose_data(*args, resp_n_expected_here: bool = False, **kwargs) -> str | None:
+def to_verbose_data(*args, response_and_expected_here: bool = False, **kwargs) -> str | None:
 	if not args and not kwargs:
 		return None
 
@@ -33,7 +33,7 @@ def to_verbose_data(*args, resp_n_expected_here: bool = False, **kwargs) -> str 
 	for i in range(len(args)-1):
 		header = f'Element {i}'
 
-		if resp_n_expected_here and i < 2:
+		if response_and_expected_here and i < 2:
 			header = ['Response data', 'Expected data'][i]
 
 		data_for_performing[header] = args[i]

@@ -1,3 +1,4 @@
+
 ## Тестовое задание: Task Manager API
 #### Требования
 - Без `темплейтов`, только API. ✅
@@ -7,8 +8,12 @@
 #### Эндпоинты:
 - **Задачи**
 	- `api/tasks/`: `[GET, POST]`
+		- Возвращает все задачи, но без комментариев
 	- `api/tasks/<pk>/`: `[GET, PUT, PATCH, DELETE]`
+		- Возвращает задачу и информацию о комментариях связанных с ней (pk, content, и вложенную информацию о created_by)
 	- `api/tasks/<pk>/comments/`: `[GET, POST]`
+		- `[GET]`: ...
+		- `[POST]`: Создать комментарий 
 	- `api/tasks/<pk>/comments/<pk>/`: `[GET, PUT, PATCH, DELETE]`
 - **Авторизация**
 	- `api/token/`: `[POST]` `{username, password}`

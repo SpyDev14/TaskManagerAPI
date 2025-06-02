@@ -6,11 +6,11 @@ from django.urls          import reverse
 from rest_framework.test  import APITestCase
 from rest_framework       import status
 
-from users.tests.debug_client import CookieJWTDebugClient
-from users.models             import User
-from tasks.serializers        import TaskSerializer
-from tasks.models             import Task
-from tasks.views              import TaskViewSet
+from users.models      import User
+from tasks.tests.utils import CookieJWTDebugClient
+from tasks.serializers import TaskSerializer
+from tasks.models      import Task
+from tasks.views       import TaskViewSet
 
 from tasks.tests.utils import to_verbose_data
 
