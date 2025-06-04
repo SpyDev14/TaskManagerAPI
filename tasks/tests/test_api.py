@@ -1,33 +1,47 @@
-from typing import Literal
-from copy   import copy
+from datetime import datetime, timedelta
+from typing   import Literal
+from copy     import copy
 
 from django.http.response    import HttpResponse
 from django.contrib.auth     import get_user_model
 from django.test.utils       import CaptureQueriesContext
 from django.db.models        import Q, QuerySet
-from django.db               import connection
 from django.urls             import reverse
+from django.db               import connection
+from django.utils            import timezone
 from rest_framework.response import Response
 from rest_framework.test     import APITestCase
 from rest_framework          import status
 
-from tasks.tests.utils import CookieJWTDebugClient, to_verbose_data, setUpBase
+from tasks.tests.utils import CookieJWTDebugClient, to_verbose_data
 from tasks.serializers import TaskSerializer
 from tasks.models      import Task, Comment
 from tasks.views       import TaskViewSet
-from users.models      import User as _User
+from users.models      import User as _User # для аннотации
 
 User: type[_User] = get_user_model()
 
 
+DUE_DATES: dict[str, datetime | None] = {
+	'never':      None,
 
+	'in a month':    timezone.now() + timedelta(days = 30),
+	'this month':    timezone.now() + timedelta(days = 14),
+	'next week':     timezone.now() + timedelta(days = 7),
+	'tomorrow':      timezone.now() + timedelta(days = 1),
+	'today':         timezone.now().replace(hour = 23, minute = 59),
+	'in an 6 hours': timezone.now() + timedelta(hours = 6),
+	'hour ago':      timezone.now() - timedelta(hours = 1),
+	'yesterday':     timezone.now() - timedelta(days  = 1),
+	'week ago':      timezone.now() - timedelta(days  = 7),
+}
 
 class TaskAPITest(APITestCase):
 	client_class = CookieJWTDebugClient
 
 	# Только задачи
 	EXPECTED_SQL_QUERY_COUNT_FOR_GET_LIST: int = 1
-	# Задача и комментарии
+	# Задача и комментарии (но с оптимизацией всё равно 1)
 	EXPECTED_SQL_QUERY_COUNT_FOR_GET_DETAIL: int = 1
 
 
@@ -59,17 +73,18 @@ class TaskAPITest(APITestCase):
 			is_superuser = True,
 		)
 
-
 		self.user_1_tasks: dict[Literal['Task 1', 'Task 2'], Task] = {
 			'Task 1': Task.objects.create(
 				created_by = self.user_1,
 				title      = 'Task 1',
-				priority   = Task.Priority.MEDIUM
+				priority   = Task.Priority.MEDIUM,
+				due_date   = DUE_DATES['tomorrow'], 
 			),
 			'Task 2': Task.objects.create(
 				created_by = self.user_1,
 				title      = 'Task 2',
-				priority   = Task.Priority.LOW
+				priority   = Task.Priority.LOW,
+				due_date   = DUE_DATES['week ago'],
 			),
 		}
 
@@ -77,12 +92,15 @@ class TaskAPITest(APITestCase):
 			'Task 1': Task.objects.create(
 				created_by = self.user_2,
 				title = 'Task 1',
-				priority = Task.Priority.MEDIUM
+				priority = Task.Priority.MEDIUM,
+				due_date = DUE_DATES['in a month'],
+				is_completed = True,
 			),
 			'Task 2': Task.objects.create(
 				created_by = self.user_2,
 				title = 'Task 2',
-				priority = Task.Priority.LOW
+				priority = Task.Priority.LOW,
+				due_date = DUE_DATES['never'],
 			),
 		}
 
@@ -90,7 +108,8 @@ class TaskAPITest(APITestCase):
 			'Task 1': Task.objects.create(
 				created_by = self.user_3,
 				title = 'Task 1',
-				priority = Task.Priority.HIGH
+				priority = Task.Priority.HIGH,
+				due_date = DUE_DATES['never'],
 			),
 		}
 
@@ -106,41 +125,49 @@ class TaskAPITest(APITestCase):
 				assigned_to = self.user_2,
 				title = 'PM Task 1 for User2',
 				priority = Task.Priority.MEDIUM,
+				due_date = DUE_DATES['tomorrow'],
 				is_completed = True,
 			),
 			'PM Task 2 for User2':  Task.objects.create(
 				created_by = self.pm_user,
 				assigned_to = self.user_2,
 				title = 'PM Task 2 for User2',
-				priority = Task.Priority.HIGH
+				priority = Task.Priority.HIGH,
+				due_date = DUE_DATES['next week'],
 			),
 			'PM Task 1 for User3':  Task.objects.create(
 				created_by = self.pm_user,
 				assigned_to = self.user_3,
 				title = 'PM Task 1 for User3',
 				priority = Task.Priority.MEDIUM,
+				due_date = DUE_DATES['yesterday'],
 			),
 			'PM Task 2 for User3':  Task.objects.create(
 				created_by = self.pm_user,
 				assigned_to = self.user_3,
 				title = 'PM Task 2 for User3',
 				priority = Task.Priority.LOW,
+				due_date = DUE_DATES['week ago'],
+				is_completed = True,
 			),
 			'PM Task 3 for User3':  Task.objects.create(
 				created_by = self.pm_user,
 				assigned_to = self.user_3,
 				title = 'PM Task 3 for User3',
 				priority = Task.Priority.HIGH,
+				due_date = DUE_DATES['yesterday'],
 			),
 			'PM Unassigned Task 1': Task.objects.create(
 				created_by = self.pm_user,
 				title = 'PM Unassigned Task 1',
 				priority = Task.Priority.LOW,
+				due_date = DUE_DATES['tomorrow'],
 			),
 			'PM Unassigned Task 2': Task.objects.create(
 				created_by = self.pm_user,
 				title = 'PM Unassigned Task 2',
 				priority = Task.Priority.LOW,
+				due_date = DUE_DATES['never'],
 			),
 			'PM Own Task 1':        Task.objects.create(
 				created_by = self.pm_user,
@@ -148,6 +175,7 @@ class TaskAPITest(APITestCase):
 				title = 'PM Own Task 1',
 				description = 'TASKFORME',
 				priority = Task.Priority.HIGH,
+				due_date = DUE_DATES['in an 6 hours'],
 				is_completed = True,
 			),
 		}
@@ -156,13 +184,15 @@ class TaskAPITest(APITestCase):
 			'Superuser Task 1': Task.objects.create(
 				created_by = self.superuser,
 				title = 'Superuser Task 1',
-				priority = Task.Priority.LOW
+				priority = Task.Priority.LOW,
+				due_date = DUE_DATES['never'],
 			),
 			'Superuser Task for PM': Task.objects.create(
 				created_by = self.superuser,
 				assigned_to = self.pm_user,
 				title = 'Superuser Task for PM',
 				priority = Task.Priority.HIGH,
+				due_date = DUE_DATES['in a month'],
 			),
 		}
 
@@ -342,10 +372,11 @@ class TaskAPITest(APITestCase):
 	# перебором regular user, pm_user и superuser
 	def test_get_list_from_anonymous(self):
 		"""Проверяет, что аноним не может просмотреть список задач."""
+		expected_key: str = 'detail'
 		response: Response = self.client.get(self.tasks_list_url)
 
 		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-		self.assertIsNone(response.data)
+		self.assertIn(expected_key, response.data, to_verbose_data(response_data = response.data))
 
 
 	def test_get_list_from_regular_user(self):
@@ -366,7 +397,7 @@ class TaskAPITest(APITestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			to_verbose_data(response.data, expected_data, here='Response Data & Expected Data'))
 		
 		for task_data in response.data:
 			task = Task.objects.get(pk = task_data['id'])
@@ -378,48 +409,26 @@ class TaskAPITest(APITestCase):
 			)
 
 
-	def test_get_list_from_pm(self):
+	def test_get_list_from_pm_and_superuser(self):
 		"""
-		Проверяет, что при запросе на task-list с уч. записи pm_user будут возвращены все
-		задачи.
+		Проверяет, что при запросе на task-list с уч. записи pm_user или superuser
+		будут возвращены все задачи.
 		"""
-		user = self.pm_user
-		self.client.force_login(user)
+		for user in [self.pm_user, self.superuser]:
+			self.client.force_login(user)
 
-		response: Response = self.client.get(self.tasks_list_url)
+			response: Response = self.client.get(self.tasks_list_url)
 
-		expected_data: dict = TaskSerializer(
-			self.default_qs,
-			many = True
-		).data
-
-
-		self.assertEqual(response.status_code, status.HTTP_200_OK)
-		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response, expected_data, response_and_expected_here=True))
-		self.assertEqual(len(response.data), Task.objects.count())
+			expected_data: dict = TaskSerializer(
+				self.default_qs,
+				many = True
+			).data
 
 
-	def test_get_list_from_superuser(self):
-		"""
-		Проверяет, что при запросе на task-list с уч. записи superuser ответ будет аналогичен
-		pm_user.
-		"""
-		user = self.superuser
-		self.client.force_login(user)
-
-		response: Response = self.client.get(self.tasks_list_url)
-
-		expected_data: dict = TaskSerializer(
-			self.default_qs,
-			many = True
-		).data
-
-
-		self.assertEqual(response.status_code, status.HTTP_200_OK)
-		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response, expected_data, response_and_expected_here=True))
-		self.assertEqual(len(response.data), Task.objects.count())
+			self.assertEqual(response.status_code, status.HTTP_200_OK)
+			self.assertEqual(response.data, expected_data,
+				to_verbose_data(response, expected_data, user, here='Response Data, Expected Data & User'))
+			self.assertEqual(len(response.data), Task.objects.count())
 
 
 	#MARK: Advanced get list
@@ -429,25 +438,25 @@ class TaskAPITest(APITestCase):
 		is_completed, due_date (выполненные в конце, те, у которых скоро дедлайн - в начале, невыполненные
 		и просроченные - самые первые).
 		"""
-		user = self.superuser
-		self.client.force_login(user)
+		for user in [self.pm_user, self.superuser]:
+			self.client.force_login(user)
 
-		url_query = {
-			'ordering': 'due_date', # сначала невыполненные, со скорым дедлайном
-		}
+			url_query = {
+				'ordering': 'due_date', # сначала невыполненные, со скорым дедлайном
+			}
 
-		response: Response = self.client.get(self.tasks_list_url, data = url_query, format = 'json')
+			response: Response = self.client.get(self.tasks_list_url, data = url_query, format = 'json')
 
-		expected_data: dict = TaskSerializer(
-			Task.objects.order_by('is_completed,due_date'),
-			many = True
-		).data
-		
+			expected_data: dict = TaskSerializer(
+				Task.objects.order_by('is_completed,due_date'),
+				many = True
+			).data
+			
 
 
-		self.assertEqual(response.status_code, status.HTTP_200_OK)
-		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			self.assertEqual(response.status_code, status.HTTP_200_OK)
+			self.assertEqual(response.data, expected_data,
+				to_verbose_data(response.data, expected_data, user, here='Response Data, Expected Data & User'))
 
 
 	def test_get_list_with_ordering_by_revert_due_date(self):
@@ -455,25 +464,25 @@ class TaskAPITest(APITestCase):
 		Проверяет, что при сортировке по -due_date в запросе, в ответе записи будут отсортированны по
 		is_completed, -due_date (выполненные в конце, те, у которых дедлайн позже всех - в начале).
 		"""
-		user = self.superuser
-		self.client.force_login(user)
+		for user in [self.pm_user, self.superuser]:
+			self.client.force_login(user)
 
-		url_query = {
-			'ordering': '-due_date',
-		}
+			url_query = {
+				'ordering': '-due_date',
+			}
 
-		response: Response = self.client.get(self.tasks_list_url, data = url_query, format = 'json')
+			response: Response = self.client.get(self.tasks_list_url, data = url_query, format = 'json')
 
-		expected_data: dict = TaskSerializer(
-			Task.objects.order_by('is_completed,-due_date'),
-			many = True
-		).data
-		
+			expected_data: dict = TaskSerializer(
+				Task.objects.order_by('is_completed,-due_date'),
+				many = True
+			).data
+			
 
 
-		self.assertEqual(response.status_code, status.HTTP_200_OK)
-		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			self.assertEqual(response.status_code, status.HTTP_200_OK)
+			self.assertEqual(response.data, expected_data,
+				to_verbose_data(response.data, expected_data, here='Response Data & Expected Data', user = user))
 
 
 	def test_get_list_with_filtering(self):
@@ -498,7 +507,7 @@ class TaskAPITest(APITestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			to_verbose_data(response.data, expected_data, here='Response Data & Expected Data'))
 
 
 	def test_get_list_with_filtering_by_assigned_user(self):
@@ -522,10 +531,10 @@ class TaskAPITest(APITestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			to_verbose_data(response.data, expected_data, here='Response Data & Expected Data'))
 		
 	
-	def test_get_list_with_filtering_by_not_assigned_user(self):
+	def test_get_list_with_filtering_by_assigned_user_is_none(self):
 		"""
 		Проверяет, что фильтрация по assigned_to работает корректно.
 		"""
@@ -546,7 +555,7 @@ class TaskAPITest(APITestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			to_verbose_data(response.data, expected_data, here='Response Data & Expected Data'))
 
 
 	def test_get_list_with_search(self):
@@ -578,7 +587,7 @@ class TaskAPITest(APITestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			to_verbose_data(response.data, expected_data, here='Response Data & Expected Data'))
 
 
 	def test_get_list_with_filtering_ordering_and_search(self):
@@ -610,7 +619,7 @@ class TaskAPITest(APITestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			to_verbose_data(response.data, expected_data, here='Response Data & Expected Data'))
 
 
 	def test_get_list_with_filtering_ordering_and_search_from_regular_user(self):
@@ -641,7 +650,7 @@ class TaskAPITest(APITestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			to_verbose_data(response.data, expected_data, here='Response Data & Expected Data'))
 
 
 	def test_get_list_filtered_with_wrong_priority(self):
@@ -663,7 +672,7 @@ class TaskAPITest(APITestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			to_verbose_data(response.data, expected_data, here='Response Data & Expected Data'))
 
 
 	def test_get_list_filtered_with_not_valid_value_in_is_completed(self):
@@ -678,14 +687,15 @@ class TaskAPITest(APITestCase):
 		url_query = {
 			'is_completed': 'invalid',
 		}
+		expected_key: str = 'is_completed'
 
 		response: Response = self.client.get(self.tasks_list_url, data = url_query, format = 'json')
 
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-		self.assertIsNone(response.data)
+		self.assertIn(expected_key, response.data, to_verbose_data(response_data = response.data))
 
 
-	def test_get_list_filtered_with_none_exists_assigned_user(self):
+	def test_get_list_filtered_with_not_exists_assigned_user(self):
 		"""
 		Проверяет, что при фильтрации по assigned_to с указанием несуществующего пользователя
 		в ответе будет пустой список (так как таких записей не существует).
@@ -704,10 +714,10 @@ class TaskAPITest(APITestCase):
 		# "Нашёл" все записи, где priority = invalid (то есть ничего не нашёл)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			to_verbose_data(response.data, expected_data, here='Response Data & Expected Data'))
 
 
-	def test_get_list_ordered_with_bad_data(self):
+	def test_get_list_ordered_with_ordering_by_not_exists_field(self):
 		"""
 		Проверяет, что при попытке получить через API отсортированный список задач с неправильным полем
 		для сортировки - ответ будет отсортирован по умолчанию (проигнорируется).
@@ -729,7 +739,7 @@ class TaskAPITest(APITestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			to_verbose_data(response.data, expected_data, here='Response Data & Expected Data'))
 
 
 	def test_get_list_sql_efficiency(self):
@@ -746,13 +756,14 @@ class TaskAPITest(APITestCase):
 	def test_get_detail_from_anonymous(self):
 		"""Проверяет, что аноним не может получить задачу."""
 		task = self.user_1_tasks['Task 1']
+		expected_key: str = 'detail'
 		response: Response = self.client.get(self.make_task_detail_url(task.pk))
 
 		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-		self.assertIsNone(response.data)
+		self.assertIn(expected_key, response.data, to_verbose_data(response_data = response.data))
 
 
-	def test_get_detail_from_owner(self):
+	def test_get_detail_from_owner_and_assigned_user(self):
 		"""Проверяет, что владелец задачи может получить task-detail своей задачи."""
 		user = self.user_1
 		task = self.user_1_tasks['Task 2']
@@ -767,25 +778,7 @@ class TaskAPITest(APITestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
-		
-
-	def test_get_detail_from_assigned_user(self):
-		"""Проверяет, что назначенный пользовательй может получить task-detail своей задачи."""
-		user = self.user_2
-		task = self.pm_user_tasks['PM Task 1 for User2']
-		self.client.force_login(user)
-
-		response: Response = self.client.get(self.make_task_detail_url(task.pk))
-
-		expected_data: dict = TaskSerializer(
-			Task.objects.get(pk = task.pk)
-		).data
-
-
-		self.assertEqual(response.status_code, status.HTTP_200_OK)
-		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here=True))
+			to_verbose_data(response.data, expected_data, here='Response Data & Expected Data'))
 
 
 	def test_get_detail_from_another_regular_user(self):
@@ -813,7 +806,7 @@ class TaskAPITest(APITestCase):
 
 
 	# MARK: Creating
-	# Где пользователи через or - там всё в цикле for с перебором пользователей,
+	# Где пользователи через or/and - там всё в цикле for с перебором пользователей,
 	# заодно косвенно авторизацию проверим.
 	def test_create_from_anonymous(self):
 		"""
@@ -825,14 +818,15 @@ class TaskAPITest(APITestCase):
 		data: dict = {
 			'title': 'Task 3',
 			'priority': Task.Priority.MEDIUM,
-			'description': 'New task',
+			'description': 'This is a new task',
+			'due_date': DUE_DATES['next week'],
 		}
-
+		expected_key: str = 'detail'
 		
 		response: Response = self.client.post(self.tasks_list_url, data = data, format = 'json')
 
 		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-		self.assertIsNone(response.data)
+		self.assertIn(expected_key, response.data, to_verbose_data(response_data = response.data))
 		self.assertEqual(Task.objects.order_by('id').last(), last_task,
 			to_verbose_data(
 				last_task     = Task.objects.order_by('id').last(),
@@ -853,83 +847,242 @@ class TaskAPITest(APITestCase):
 		data: dict = {
 			'title': 'Task 3',
 			'priority': Task.Priority.MEDIUM,
-			'description': 'New task 123',
+			'description': 'This is a new task',
+			'due_date': DUE_DATES['next week'],
 		}
-
-		serializer = TaskSerializer(data = data)
-		assert serializer.is_valid(raise_exception = True)
-
-		expected_data: dict = serializer.data
 
 
 		response: Response = self.client.post(self.tasks_list_url, data = data, format = 'json')
 
 		current_last_task = Task.objects.order_by('id').last()
 		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-		self.assertEqual(response.data, expected_data,
-			to_verbose_data(response.data, expected_data, response_and_expected_here = True))
-		self.assertNotEqual(current_last_task, initial_last_task,
-			to_verbose_data(
-				last_task     = initial_last_task,
-				expected_task = expected_data))
+		self.assertNotEqual(current_last_task, initial_last_task)
 		self.assertEqual(Task.objects.count(), initial_tasks_count + 1)
 
 		new_task = current_last_task
-		self.assertEqual(new_task.description, 'New task 123')
-		self.assertEqual(new_task.created_by, user)
-		self.assertEqual(new_task.priority, Task.Priority.MEDIUM)
+		expected_data: dict = TaskSerializer(new_task).data
+		self.assertEqual(response.data, expected_data,
+			to_verbose_data(response.data, expected_data, here = 'Response Data & Expected Data'))
+		self.assertEqual(new_task.created_by, user,
+			to_verbose_data(this_user = user, task_owner = new_task.created_by))
+		self.assertEqual(new_task.assigned_to, user,
+			to_verbose_data(this_user = user, assigned_to_task_user = new_task.assigned_to))
 
 
 	def test_create_with_void_title(self):
 		"""
 		Проверка, что при попытке создания задачи с пустым заголовком мы получим ошибку 400.
 		"""
-		pass
+		user = self.user_1
+		self.client.force_login(user)
+
+		initial_tasks_count: int = Task.objects.count()
+		initial_last_task:  Task = Task.objects.order_by('id').last()
+		
+		data: dict = {
+			'title': '',
+			'priority': Task.Priority.MEDIUM,
+			'description': 'This is a new task',
+			'due_date': DUE_DATES['next week'],
+		}
+
+		expected_key: str = 'title'
+
+		
+		response: Response = self.client.post(self.tasks_list_url, data = data, format = 'json')
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertIn(expected_key, response.data, to_verbose_data(
+			expected_key = expected_key,
+			response_data = response.data))
+		self.assertEqual(Task.objects.order_by('id').last(), initial_last_task, to_verbose_data(
+			last_task = Task.objects.order_by('id').last(),
+			expected_task = initial_last_task))
+		self.assertEqual(Task.objects.count(), initial_tasks_count)
 	
-	def test_create_with_wrong_priority(self):
+
+	def test_create_with_not_exists_priority_level(self):
 		"""
 		Проверка, что при попытке создать задачу с несуществующей приоритетностью мы получим
 		ошибку 400.
 		"""
-		pass
-	
-	def test_create_with_created_by_in_data(self):
+		user = self.user_1
+		self.client.force_login(user)
+
+		initial_tasks_count: int = Task.objects.count()
+		initial_last_task:  Task = Task.objects.order_by('id').last()
+		
+		data: dict = {
+			'title': 'New task',
+			'priority': 'invalid',
+			'description': 'This is a new task',
+			'due_date': DUE_DATES['next week'],
+		}
+
+		expected_key: str = 'priority'
+
+		
+		response: Response = self.client.post(self.tasks_list_url, data = data, format = 'json')
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertIn(expected_key, response.data, to_verbose_data(
+			expected_key = expected_key,
+			response_data = response.data))
+		self.assertEqual(Task.objects.order_by('id').last(), initial_last_task, to_verbose_data(
+			last_task = Task.objects.order_by('id').last(),
+			expected_task = initial_last_task))
+		self.assertEqual(Task.objects.count(), initial_tasks_count)
+		
+
+	def test_create_created_by_autoset_even_if_specified_in_the_body(self):
 		"""
-		Проверка, что при попытке создать задачу с указанием в body created_by - это поле
-		проигнорируется (туда установится текущий пользователь).
+		Проверка, что при создании задачи в поле created_by всегда устанавливается
+		пользователь, отправивший запрос, даже если поле created_by было указано в
+		теле запроса и ссылалось на другого пользователя (то есть проигнорируется).
 		"""
-		pass
+		user = self.user_1
+		self.client.force_login(user)
+
+		initial_tasks_count: int = Task.objects.count()
+		initial_last_task:  Task = Task.objects.order_by('id').last()
+
+		data: dict = {
+			'title': 'Task 3',
+			'priority': Task.Priority.MEDIUM,
+			'description': 'This is a new task',
+			'due_date': DUE_DATES['next week'],
+			'created_by': self.user_3.pk,
+		}
+
+
+		response: Response = self.client.post(self.tasks_list_url, data = data, format = 'json')
+
+		current_last_task = Task.objects.order_by('id').last()
+		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+		self.assertNotEqual(current_last_task, initial_last_task)
+		self.assertEqual(Task.objects.count(), initial_tasks_count + 1)
+
+		new_task = current_last_task
+		self.assertEqual(new_task.created_by, user,
+			to_verbose_data(this_user = user, task_owner = new_task.created_by))
+
 	
 	def test_create_with_assigned_to_something_user_from_regular_user(self):
 		"""
-		Проверка, что обычный пользователь не может назначить кого-то на задачу при создании и
-		в это поле будет установлен он сам при создании.
+		Проверка, что обычный пользователь не может назначить кого-то на задачу при
+		создании и в это поле автоматически будет установлен он сам.
 		"""
-		pass
+		user = self.user_1
+		self.client.force_login(user)
+
+		initial_tasks_count: int = Task.objects.count()
+		initial_last_task:  Task = Task.objects.order_by('id').last()
+
+		data: dict = {
+			'title': 'Task 3',
+			'priority': Task.Priority.MEDIUM,
+			'description': 'This is a new task',
+			'due_date': DUE_DATES['next week'],
+			'assigned_to': self.user_3,
+		}
+		expected_user = self.user_3
+
+
+		response: Response = self.client.post(self.tasks_list_url, data = data, format = 'json')
+
+		current_last_task = Task.objects.order_by('id').last()
+		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+		self.assertNotEqual(current_last_task, initial_last_task)
+		self.assertEqual(Task.objects.count(), initial_tasks_count + 1)
+
+		new_task = current_last_task
+		self.assertEqual(new_task.assigned_to, user,
+			to_verbose_data(expected_user = expected_user, assigned_to_task_user = new_task.assigned_to))
 	
 	def test_create_with_assigned_to_something_user_from_pm_or_superuser(self):
 		"""
-		Проверка, что ПМ может указать назначенного пользователя при создании.
+		Проверка, что ПМ и суперпользователь могут указать назначенного пользователя
+		при создании.
 		"""
-		pass
+		for user in [self.pm_user, self.superuser]:
+			self.client.force_login(user)
+
+			initial_tasks_count: int = Task.objects.count()
+			initial_last_task:  Task = Task.objects.order_by('id').last()
+
+			data: dict = {
+				'title': 'Task 3',
+				'priority': Task.Priority.MEDIUM,
+				'description': 'This is a new task',
+				'due_date': DUE_DATES['next week'],
+				'assigned_to': self.user_3,
+			}
+			expected_user = self.user_3
+
+
+			response: Response = self.client.post(self.tasks_list_url, data = data, format = 'json')
+
+			current_last_task = Task.objects.order_by('id').last()
+			self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+			self.assertNotEqual(current_last_task, initial_last_task)
+			self.assertEqual(Task.objects.count(), initial_tasks_count + 1)
+
+			new_task = current_last_task
+			expected_data: dict = TaskSerializer(new_task).data
+			self.assertEqual(response.data, expected_data,
+				to_verbose_data(response.data, expected_data, here = 'Response Data & Expected Data'))
+			self.assertEqual(new_task.created_by, user,
+				to_verbose_data(this_user = user, task_owner = new_task.created_by))
+			self.assertEqual(new_task.assigned_to, user,
+				to_verbose_data(expected_user = expected_user, assigned_to_task_user = new_task.assigned_to))
+		
 
 	def test_create_without_assigned_to_in_data_from_pm_or_superuser(self):
 		"""
-		Проверка, что если ПМ не укажет никого в assigned_to, то в этом поле будет None.
+		Проверка, что если ПМ или суперпользователь не укажет никого в assigned_to,
+		в этом поле будет None. Также проверяет создание в принципе.
 		"""
-		pass
+		for user in [self.pm_user, self.superuser]:
+			self.client.force_login(user)
+
+			initial_tasks_count: int = Task.objects.count()
+			initial_last_task:  Task = Task.objects.order_by('id').last()
+
+			data: dict = {
+				'title': 'Task 3',
+				'priority': Task.Priority.MEDIUM,
+				'description': 'This is a new task',
+				'due_date': DUE_DATES['next week'],
+			}
+
+
+			response: Response = self.client.post(self.tasks_list_url, data = data, format = 'json')
+
+			current_last_task = Task.objects.order_by('id').last()
+			self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+			self.assertNotEqual(current_last_task, initial_last_task)
+			self.assertEqual(Task.objects.count(), initial_tasks_count + 1)
+
+			new_task = current_last_task
+			expected_data: dict = TaskSerializer(new_task).data
+			self.assertEqual(response.data, expected_data,
+				to_verbose_data(response.data, expected_data, here = 'Response Data & Expected Data'))
+			self.assertEqual(new_task.assigned_to, user,
+				to_verbose_data(expected_user = None, assigned_to_task_user = new_task.assigned_to))
 
 # MARK: Updating
 	def test_update_from_anonymous(self):
 		"""
-		Проверка, что аноним не может удалить задачу.
+		Проверка, что аноним не может изменить задачу.
 		"""
+		
 		pass
+		
 	
-	# через for
 	def test_update_from_owner_or_assigned_user(self):
 		"""
-		Проверка, что пользователь установленный в created_by или в assigned_to может удалить задачу.
+		Проверка, что пользователь установленный в created_by или assigned_to
+		может изменить задачу.
 		"""
 		pass
 
@@ -939,15 +1092,17 @@ class TaskAPITest(APITestCase):
 		"""
 		pass
 	
-	def test_update_with_wrong_priority(self):
+	def test_update_with_not_exists_priority_level(self):
 		"""
-		Проверка, что нельзя присвоить задаче несуществующий уровень приоритетности.
+		Проверка, что при попытке присвоить задаче несуществующий уровень
+		приоритетности - мы получим ошибку 400.
 		"""
 		pass
 	
 	def test_update_with_assigned_to_something_user_from_regular_user(self):
 		"""
-		Проверка, что обычный пользователь не может назначать других пользователей в assigned_to.
+		Проверка, что обычный пользователь не может назначать других пользователей
+		в assigned_to.
 		"""
 		pass
 	
@@ -965,9 +1120,10 @@ class TaskAPITest(APITestCase):
 		"""
 		pass
 
+	# перебор regular user, pm & superuser, с их задачами через цикл for и tuple
 	def test_delete_from_owner(self):
 		"""
-		Проверка, что владелец может удалить задачу.
+		Проверка, что владелец может удалить свою задачу.
 		"""
 		pass
 
@@ -979,7 +1135,7 @@ class TaskAPITest(APITestCase):
 
 	def test_delete_from_pm_or_superuser(self):
 		"""
-		Проверка, что ПМ и суперпользователь могут удалить задачу.
+		Проверка, что ПМ и суперпользователь могут удалить чужую задачу.
 		"""
 		pass
 
