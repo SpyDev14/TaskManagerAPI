@@ -53,7 +53,9 @@ class CommentForTaskSerializer(CommentSerializer):
 class TaskSerializer(serializers.ModelSerializer):
 	created_by  = UserInfoSerializer(read_only = True)
 	assigned_to = UserInfoSerializer(read_only = True)
-	comments    = CommentForTaskSerializer(many = True, read_only = True) # прописано в Comment.task related_name
+	# прописано в Comment.task related_name (т.е можно обратится через Task.comments)
+	# нужно удалять поле из self.fields, если many = True
+	comments    = CommentForTaskSerializer(many = True, read_only = True)
 
 	class Meta:
 		model = Task

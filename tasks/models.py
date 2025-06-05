@@ -42,7 +42,8 @@ class Task(models.Model):
 	)
 
 	class Meta:
-		ordering = ['id']
+		# ordering = ['-id']
+		get_latest_by = 'id'
 
 
 	def __str__(self) -> str:
