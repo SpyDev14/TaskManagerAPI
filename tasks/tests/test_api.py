@@ -20,7 +20,7 @@ from users.models      import User as _User # для аннотации
 
 User: type[_User] = get_user_model()
 
-
+# TODO: название поля для изменения assigned_to сменилось на assigned_to_id!!!
 DUE_DATES: dict[str, datetime | None] = {
 	'never': None,
 

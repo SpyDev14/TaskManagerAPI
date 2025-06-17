@@ -9,7 +9,6 @@ User: type[_User] = get_user_model()
 __all__ = [
 	'TaskSerializer',
 	'CommentSerializer',
-	'CommentForTaskSerializer',
 ]
 
 class UserInfoSerializer(serializers.ModelSerializer):
@@ -18,7 +17,9 @@ class UserInfoSerializer(serializers.ModelSerializer):
 		fields = (
 			'id',
 			'username',
-			'email'
+			'email',
+			'first_name',
+			'last_name',
 		)
 
 
@@ -27,54 +28,50 @@ class CommentSerializer(serializers.ModelSerializer):
 
 	class Meta:
 		model = Comment
-		fields = (
-			'id',
-			'task',
-			'created_by',
-			'created_at',
-			'content',
-		)
-		extra_kwargs = {
-			'task': { 'read_only': True }
-		}
-
-
-class CommentForTaskSerializer(CommentSerializer):
-	class Meta(CommentSerializer.Meta):
-		fields = (
-			'id',
-			'task',
-			'created_by',
-			'created_at',
-			'content',
-		)
+		exclude = ['task']
 
 
 class TaskSerializer(serializers.ModelSerializer):
 	created_by  = UserInfoSerializer(read_only = True)
 	assigned_to = UserInfoSerializer(read_only = True)
-	# прописано в Comment.task related_name (т.е можно обратится через Task.comments)
-	# нужно удалять поле из self.fields, если many = True
-	comments    = CommentForTaskSerializer(many = True, read_only = True)
+	# Либо через переопределение to_representation с подменой, ИИ сказал вот это по REST vvv
+	assigned_to_id = serializers.PrimaryKeyRelatedField(
+		source = 'assigned_to',
+		queryset = User.objects.all(),
+		write_only = True
+	)
+
+	# Динамически удаляется при many
+	comments = CommentSerializer(many = True, read_only = True)
 
 	class Meta:
 		model = Task
 		fields = '__all__'
+		# extra_kwargs = {
+		# 	'assigned_to': {'write_only': False}
+		# }
+	
+	def get_fields(self):
+		fields = super().get_fields()
+		if isinstance(self.parent, serializers.ListSerializer):
+			fields.pop('comments')
+		return fields
 
 
-	# при создании, если создатель - это regular user,
-	# мы должны установить его в assigned_to. А если это
-	# PM - то мы не должны ничего делать, пускай творит
-	# с этим полем всё что хочет.
+	# При создании задачи, если пользователь из запроса это regular user - он
+	# автоматически устанавливается в поле assigned_to.
+	# Если это ПМ или суперадмин - поле assigned_to обрабатывается по умолчанию.
 	def create(self, validated_data):
 		user: _User = validated_data['created_by']
 
-		# также это гарантирует, что простой пользователь
-		# не может назначить кого-то на свою задачу
-		if user.role == User.Role.REGULAR_USER:
+		# обычные пользователи сами назначаются на свою задачу
+		if user.role == User.Role.REGULAR_USER and not user.is_superuser:
 			validated_data['assigned_to'] = user
 
 		task: Task = super().create(validated_data)
-		assert (task.created_by == task.assigned_to) or task.created_by.role != User.Role.REGULAR_USER
+		assert (task.created_by == task.assigned_to) or (
+			task.created_by.role != User.Role.REGULAR_USER or
+			user.is_superuser
+		)
 
 		return task

@@ -18,19 +18,18 @@ class Task(models.Model):
 		MEDIUM = ('medium', 'Medium')
 		HIGH   = ('high',   'High')
 
-
+	# Владельца можно поменять!
 	created_by = models.ForeignKey(
 		User,
 		on_delete = models.CASCADE,
-		related_name = 'created_tasks',
-		editable = False
+		related_name = 'created_tasks'
 	)
-	title      = models.CharField (max_length = 255)
-	priority   = models.CharField (max_length = 16, choices = Priority.choices)
+	title    = models.CharField (max_length = 255)
+	priority = models.CharField (max_length = 16, choices = Priority.choices)
 
-	description  = models.TextField    (max_length = 8_192, null = True, blank = True)
+	description  = models.TextField    (max_length = 8_192, blank = True)
 	is_completed = models.BooleanField (default = False)
-	created_at   = models.DateTimeField(auto_now_add = True, editable = False)
+	created_at   = models.DateTimeField(auto_now_add = True)
 	attachment   = models.FileField    (null = True, blank = True, upload_to = 'attachments/')
 	due_date     = models.DateTimeField(null = True, blank = True)
 	assigned_to  = models.ForeignKey(
@@ -47,7 +46,7 @@ class Task(models.Model):
 
 
 	def __str__(self) -> str:
-		return f'{self.title} - {self.created_by}'
+		return f'{self.title} by {self.created_by}'
 
 
 class Comment(models.Model):
@@ -55,7 +54,10 @@ class Comment(models.Model):
 	created_by = models.ForeignKey(User, on_delete = models.CASCADE, related_name = 'comments', editable = False)
 
 	content    = models.TextField(max_length = 2_048)
-	created_at = models.DateTimeField(auto_now_add = True, editable = False)
+	created_at = models.DateTimeField(auto_now_add = True)
 
 	class Meta:
 		ordering = ['-created_at']
+
+	def __str__(self) -> str:
+		return f'Comment №{self.pk} under task "{self.task.title}" from "{self.created_by}"'
