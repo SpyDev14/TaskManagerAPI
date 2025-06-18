@@ -1,7 +1,8 @@
 from django.utils.translation            import gettext_lazy as loc
 from django.contrib.auth                 import authenticate, get_user_model
-from django.conf                         import settings
 from django.http.request                 import HttpRequest
+from django.utils                        import timezone
+from django.conf                         import settings
 from rest_framework.permissions          import IsAuthenticatedOrReadOnly
 from rest_framework.response             import Response
 from rest_framework.request              import Request
@@ -118,12 +119,20 @@ class CookieTokenObtainPairView(TokenObtainPairView):
 
 		raw_access_token  = response.data['access']
 		raw_refresh_token = response.data['refresh']
+		
 
 		_add_tokens_to_response_cookies_from_raw_tokens(
 			response = response,
 			access_token  = raw_access_token,
 			refresh_token = raw_refresh_token,
 		)
+
+		# дупликация кода (дубликат в TokenRefresh)
+		# лучше сигналы
+		user_id = AccessToken(raw_access_token)['user_id']
+		user = User.objects.get(pk = user_id)
+		user.last_login = timezone.now()
+		user.save(update_fields = ['last_login'])
 
 		response.data = None
 		return response
@@ -161,6 +170,13 @@ class CookieTokenRefreshView(TokenRefreshView):
 			access_token = serializer.validated_data['access'],
 			refresh_token = serializer.validated_data['refresh'],
 		)
+
+		# дупликация кода (дубликат в TokenObtain)
+		# лучше сигналы
+		user_id = AccessToken(serializer.validated_data['access'])['user_id']
+		user = User.objects.get(pk = user_id)
+		user.last_login = timezone.now()
+		user.save(update_fields = ['last_login'])
 
 		assert response.data is None, str(response.data)
 

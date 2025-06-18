@@ -6,6 +6,7 @@ from tasks import views
 
 api_router = DefaultRouter()
 api_router.register('tasks', views.TaskViewSet, basename = 'task')
+api_router.register('tasks/<int:task_pk>', views.TaskViewSet, basename = 'task-comments')
 
 urlpatterns = [
     path('api/', include(api_router.urls))

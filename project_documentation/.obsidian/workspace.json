@@ -8,31 +8,17 @@
         "type": "tabs",
         "children": [
           {
-            "id": "cbf9ef1809cf4317",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "Test check's.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "Test check's"
-            }
-          },
-          {
             "id": "6cdf275aa991a460",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Test check's.md",
+                "file": "Technical order.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Test check's"
+              "title": "Technical order"
             }
           }
         ]
@@ -92,7 +78,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 200
+    "width": 200,
+    "collapsed": true
   },
   "right": {
     "id": "35e1104523c48f13",
@@ -182,10 +169,10 @@
       "command-palette:Открыть палитру команд": false
     }
   },
-  "active": "cbf9ef1809cf4317",
+  "active": "6cdf275aa991a460",
   "lastOpenFiles": [
-    "Technical order.md",
     "Test check's.md",
+    "Technical order.md",
     "Заметки.md",
     "Pasted image 20250529170126.png",
     "Pasted image 20250529091530.png",

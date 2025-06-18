@@ -1,6 +1,7 @@
 django
 django.test
 django.filter
+django-crispy-forms
 django-cleanup
 djangorestframework
 djangorestframework-simplejwt

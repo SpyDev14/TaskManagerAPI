@@ -54,6 +54,7 @@ INSTALLED_APPS = [
 	'rest_framework_simplejwt',
 	'rest_framework_simplejwt.token_blacklist',
 	'django_cleanup.apps.CleanupConfig',
+	'django_filters',
 
 	# This project
 	'users',
@@ -141,10 +142,10 @@ LOCALE_PATHS = [BASE_DIR / 'locale']
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = 'api/static/'
 STATIC_ROOT = Path(BASE_DIR / 'static')
 
-MEDIA_URL = 'media/'
+MEDIA_URL = 'api/media/'
 MEDIA_ROOT = Path(BASE_DIR / 'media')
 
 # Default primary key field type
@@ -157,7 +158,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
 	'DEFAULT_AUTHENTICATION_CLASSES': (
 		'users.authenticators.JWTFromCookiesAuthentication',
-	)
+	),
+	# 'DEFAULT_FILTER_BACKENDS': (
+	# 	'django_filters.rest_framework.DjangoFilterBackend'
+	# ),
 }
 
 
