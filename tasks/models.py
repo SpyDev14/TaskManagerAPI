@@ -60,4 +60,4 @@ class Comment(models.Model):
 		ordering = ['-created_at']
 
 	def __str__(self) -> str:
-		return f'Comment №{self.pk} under task "{self.task.title}" from "{self.created_by}"'
+		return f'Comment under task "{self.task}" from {self.created_by}'

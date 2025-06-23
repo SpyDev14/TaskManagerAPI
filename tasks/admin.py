@@ -61,7 +61,7 @@ class CommentAdmin(admin.ModelAdmin):
 	list_filter = ['task', 'created_by']
 	list_display_links = ['id']
 	search_fields = ['content', 'task__title', 'created_by__username']
-	ordering = ['created_at']
+	ordering = ['task', 'created_at']
 
 	def short_content(self, obj: models.Comment):
 		MAX_LENGTH: int = 48
@@ -91,11 +91,11 @@ class CommentAdmin(admin.ModelAdmin):
 class TaskAdmin(admin.ModelAdmin):
 	list_display = [
 		'id', 'title', 'created_by', 'assigned_to',
-		'due_date', 'priority', 'is_completed', # 'created_at'
+		'due_date', 'priority', 'is_completed', #'created_at'
 	]
 	list_display_links = ['title']
 	search_fields = ['title', 'description', 'created_by__username']
-	ordering = ['created_at']
+	# ordering = ['id']
 	list_filter = ['priority', 'created_by', 'assigned_to']
 	list_per_page = 50
 

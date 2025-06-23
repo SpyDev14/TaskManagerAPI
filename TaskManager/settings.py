@@ -181,3 +181,8 @@ SIMPLE_JWT = {
 	'AUTH_COOKIE_DOMAIN':    None,
 	'AUTH_COOKIE_PATH':      '/',
 }
+
+if DEBUG:
+	SIMPLE_JWT.update({
+		'ACCESS_TOKEN_LIFETIME': timedelta(hours = 12)
+	})

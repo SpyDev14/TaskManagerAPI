@@ -9,7 +9,8 @@ class TaskOrderingFilter(OrderingFilter):
 	def get_ordering(self, request, queryset, view):
 		ordering = super().get_ordering(request, queryset, view)
 
-		if not ordering: return ordering
+		if not ordering:
+			return ordering
 
 		if any(order_param.lstrip('-') == self.DUE_DATE_FIELD_NAME for order_param in ordering):
 			ordering = (self.IS_COMPLETED_FIELD_NAME, *ordering)
