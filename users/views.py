@@ -1,5 +1,6 @@
+from django.contrib.auth.signals         import user_logged_in
 from django.utils.translation            import gettext_lazy as loc
-from django.contrib.auth                 import authenticate, get_user_model
+from django.contrib.auth                 import get_user_model
 from django.http.request                 import HttpRequest
 from django.utils                        import timezone
 from django.conf                         import settings
@@ -57,6 +58,7 @@ def _add_tokens_to_response_cookies(response: Response, refresh: RefreshToken) -
 
 
 class RegisterView(generics.CreateAPIView):
+	throttle_scope = 'register'
 	queryset = User.objects.all()
 	serializer_class = UserRegisterSerializer
 	permission_classes = [IsAnonymousOrReadOnly]
@@ -71,7 +73,6 @@ class RegisterView(generics.CreateAPIView):
 		serializer.is_valid(raise_exception = True)
 
 		user: _User = serializer.save()
-
 		refresh = RefreshToken.for_user(user)
 
 		headers = self.get_success_headers(serializer.data)
@@ -81,8 +82,10 @@ class RegisterView(generics.CreateAPIView):
 			status = status.HTTP_201_CREATED,
 			headers = headers
 		)
-
+		
 		_add_tokens_to_response_cookies(response, refresh)
+
+		user_logged_in.send(self.__class__, request = request, user = user)
 
 		return response
 
@@ -112,6 +115,8 @@ class LogoutView(views.APIView):
 
 # MARK: JWT-Token Views
 class CookieTokenObtainPairView(TokenObtainPairView):
+	throttle_scope = 'login'
+
 	def post(self, request: Request | HttpRequest):
 
 		# При ошибке вызывает исключение
@@ -127,18 +132,17 @@ class CookieTokenObtainPairView(TokenObtainPairView):
 			refresh_token = raw_refresh_token,
 		)
 
-		# дупликация кода (дубликат в TokenRefresh)
-		# лучше сигналы
 		user_id = AccessToken(raw_access_token)['user_id']
 		user = User.objects.get(pk = user_id)
-		user.last_login = timezone.now()
-		user.save(update_fields = ['last_login'])
+		user_logged_in.send(self.__class__, request = request, user = user)
+		
 
 		response.data = None
 		return response
 
 
 class CookieTokenRefreshView(TokenRefreshView):
+	throttle_scope = 'refresh'
 	description = \
 		f"Waits for `refresh` in the `{local_settings.REFRESH_TOKEN_COOKIE_NAME}` cookie and," \
 		f" on success, sets a new `{local_settings.ACCESS_TOKEN_COOKIE_NAME}`" \
@@ -146,7 +150,7 @@ class CookieTokenRefreshView(TokenRefreshView):
 		 " in the HttpOnly, Secure, this only SameSite, cookies." \
 		 " Does not return body"
 
-	# Для работы аннотации в глупой IDE и добавляет пустую data
+	# Для работы аннотации в глупой IDE и добавляет пустую data для первичной инициализации
 	def get_serializer(self, *args, **kwargs) -> CookieTokenRefreshSerializer:
 		return super().get_serializer(data = {}, *args, **kwargs)
 
@@ -171,12 +175,13 @@ class CookieTokenRefreshView(TokenRefreshView):
 			refresh_token = serializer.validated_data['refresh'],
 		)
 
-		# дупликация кода (дубликат в TokenObtain)
-		# лучше сигналы
 		user_id = AccessToken(serializer.validated_data['access'])['user_id']
 		user = User.objects.get(pk = user_id)
-		user.last_login = timezone.now()
-		user.save(update_fields = ['last_login'])
+		user_logged_in.send(self.__class__, request = request, user = user)
+
+		# TODO: Заняться сигналами
+		# user.last_login = timezone.now()
+		# user.save(update_fields = ['last_login'])
 
 		assert response.data is None, str(response.data)
 

@@ -12,13 +12,18 @@ __all__ = [
 
 # в теории у задачи может быть владелец и другой назначенный человек
 # если PM назначит
+# Я бы сделал created_by поле сугубо историческим (информационным), а логику повесил на
+# assigned_to. Странный момент в ТЗ.
 class Task(models.Model):
 	class Priority(models.TextChoices):
 		LOW    = ('low',    'Low')
 		MEDIUM = ('medium', 'Medium')
 		HIGH   = ('high',   'High')
 
-	# Владельца можно поменять!
+	# Владельца можно поменять! В теории. Ох уж этот django, ну явно же editable = False поле!
+	# Нет, по мнению разработчиков, editable = False ИСКЛЮЧИТЕЛЬНО для сугубо технических полей.
+	# Под этим подразумевается, что формы с editable = False отказываются работать на уровне
+	# внутренней assert проверки.
 	created_by = models.ForeignKey(
 		User,
 		on_delete = models.CASCADE,

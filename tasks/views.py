@@ -1,12 +1,12 @@
 from django_filters.rest_framework import DjangoFilterBackend
 from django.contrib.auth           import get_user_model
+from django.conf                   import settings
 from django.db.models              import Prefetch
 from rest_framework.viewsets       import ModelViewSet, GenericViewSet
 from rest_framework.filters        import SearchFilter
 from rest_framework                import mixins
 
 from users.models      import User as _User
-from tasks.serializers import FIELDS_FOR_USER_INFO_SERIALIZER
 from tasks.serializers import *
 from tasks.permissions import *
 from tasks.filters     import TaskOrderingFilter, OrderingFilter
@@ -14,12 +14,21 @@ from tasks.models      import *
 
 User: type[_User] = get_user_model()
 
-# Нужен ли list? Пока оставлю, потом можно будет убрать.
+
 class CommentViewSet(
 		mixins.CreateModelMixin,
 		mixins.UpdateModelMixin,
 		mixins.DestroyModelMixin,
-		mixins.ListModelMixin,
+		# в проде не нужно, фронт может получать все эти же самые данные из task/{pk}/
+		# но смотреть api без этого неудобно
+		# хотя как будто-бы такое себе, добавляет сложности в проект
+		*(
+			[mixins.RetrieveModelMixin]
+			if settings.DEBUG
+			else []
+		),
+		mixins.ListModelMixin, # это тоже не нужно, но было запрошено в ТЗ
+		# вообще много чего странного у меня в тз, но да ладно
 		GenericViewSet,
 	):
 	serializer_class = CommentSerializer
@@ -46,14 +55,7 @@ class CommentViewSet(
 
 class TaskViewSet(ModelViewSet):
 	serializer_class = TaskSerializer
-	permission_classes = [(
-		IsOptionsOrHead | (
-			IsAuthenticated & (
-				IsAdminUser   | IsProjectManager |
-				IsObjectOwner | (IsAssignedToObject & IsNotDeleteMethod)
-			)
-		)
-	)]
+	permission_classes = [TASK_PERMISSION]
 	filter_backends  = [TaskOrderingFilter, DjangoFilterBackend, SearchFilter]
 	filterset_fields = ['priority', 'assigned_to', 'is_completed']
 	search_fields    = ['title', 'description']
@@ -84,7 +86,7 @@ class TaskViewSet(ModelViewSet):
 					.order_by(*self.COMMENTS_IN_DETAIL_ORDERING)
 					.select_related('created_by')
 			)
-
+		
 			qs = qs.prefetch_related(prefetch_comments)
 
 

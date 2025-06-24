@@ -1,8 +1,10 @@
 from django.contrib.auth        import get_user_model
 from django.http.request        import HttpRequest
 from django.db.models           import Q
+from django.shortcuts           import get_object_or_404
 from rest_framework.viewsets    import ViewSet
-from rest_framework.permissions import IsAuthenticated, IsAdminUser, BasePermission, SAFE_METHODS
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, BasePermission, SAFE_METHODS, OperandHolder
+from rest_framework.exceptions  import PermissionDenied
 
 from users.models import User as _User
 from tasks.models import Task, Comment
@@ -55,6 +57,15 @@ class IsNotDeleteMethod(BasePermission):
 	def has_permission(self, request: HttpRequest, view):
 		return request.method.upper() != 'DELETE'
 
+# вынесено здесь для get_task_qs_filter_with_permissions
+TASK_PERMISSION: OperandHolder = (
+	IsOptionsOrHead | (
+		IsAuthenticated & (
+			IsAdminUser   | IsProjectManager |
+			IsObjectOwner | (IsAssignedToObject & IsNotDeleteMethod)
+		)
+	)
+)
 
 def get_task_qs_filter_with_permissions(view: ViewSet) -> Q:
 	"""
@@ -62,6 +73,8 @@ def get_task_qs_filter_with_permissions(view: ViewSet) -> Q:
 	но без прямой зависимости (логически идентичны, но кодом не связанны,
 	должно обновляться вручную при изменении логики прав).
 	Возвращает все объекты, к которым у пользователя есть доступ GET.
+
+	Можно было реализовать программно, но это будет неоптимизированно и неэффективно.
 	"""
 
 	user: _User = view.request.user
@@ -75,9 +88,9 @@ def get_task_qs_filter_with_permissions(view: ViewSet) -> Q:
 
 
 class CommentsUnderTaskPermission(BasePermission):
-	# POST, GET (list), OPTIONS, HEAD
 	def has_permission(self, request: HttpRequest, view: ViewSet):
-		return True
+		# Эти 2 идут отдельно потому, что эти условия не зависят от задачи, хоть там
+		# и проводится такая же проверка.
 		if IsOptionsOrHead().has_permission(request, view):
 			return True
 		
@@ -85,33 +98,34 @@ class CommentsUnderTaskPermission(BasePermission):
 		if not IsAuthenticated().has_permission(request, view):
 			return False
 		
-		task_pk: int | None = view.kwargs.get('task_pk', None)
-		if task_pk is None:
-			return False
-		
-		task = Task.objects.get(pk = task_pk)
+
+		task_pk = view.kwargs['task_pk']
+		task = get_object_or_404(Task, pk = task_pk)
 
 		# выглядит так себе
-		from tasks.views  import TaskViewSet
-		if TaskViewSet().check_object_permissions(request, task):
+		from tasks.views import TaskViewSet
+		try:
+			TaskViewSet().check_object_permissions(request, task)
 			return True
-		elif (
+		except PermissionDenied:
+			pass
+
+		if (
 			IsAssignedToObject().has_object_permission(request, view, task)
-			and
-			not IsNotDeleteMethod(request, view)
+			and # это был DELETE
+			not IsNotDeleteMethod().has_permission(request, view)
 		):
 			return True
 		
-
 		return False
 	
 
 	def has_object_permission(self, request: HttpRequest, view, obj: Comment):
-		# GET (detail), OPTIONS, HEAD
+		# READ
 		if IsReadOnly().has_permission(request, view):
 			return True
 
-		# PUT, PATCH, DELETE
+		# WRITE
 		if IsObjectOwner().has_object_permission(request, view, obj):
 			return True
 		

@@ -156,12 +156,23 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # MARK: Rest framework
 REST_FRAMEWORK = {
-	'DEFAULT_AUTHENTICATION_CLASSES': (
+	'DEFAULT_AUTHENTICATION_CLASSES': [
 		'users.authenticators.JWTFromCookiesAuthentication',
-	),
-	# 'DEFAULT_FILTER_BACKENDS': (
-	# 	'django_filters.rest_framework.DjangoFilterBackend'
-	# ),
+	],
+	'DEFAULT_THROTTLE_CLASSES': [
+        # 'rest_framework.throttling.AnonRateThrottle',
+        # 'rest_framework.throttling.UserRateThrottle',
+		'rest_framework.throttling.ScopedRateThrottle',
+	],
+	'DEFAULT_THROTTLE_RATES': {
+		'anon': '240/hour',  # Анонимы
+		'user': '1200/hour', # Авторизованные пользователи
+
+		# Views
+		'login':    '16/hour', # task.views.CookieTokenObtainPairView
+		'refresh':  '16/hour', # task.views.CookieTokenRefreshView
+		'register': '12/hour', # task.views.RegisterView
+	}
 }
 
 

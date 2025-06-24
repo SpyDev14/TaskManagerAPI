@@ -23,8 +23,6 @@ class UserInfoSerializer(serializers.ModelSerializer):
 			'last_name',
 		)
 
-FIELDS_FOR_USER_INFO_SERIALIZER: tuple[str] = UserInfoSerializer.Meta.fields
-
 class CommentSerializer(serializers.ModelSerializer):
 	created_by = UserInfoSerializer(read_only = True)
 
