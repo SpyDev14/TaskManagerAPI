@@ -19,16 +19,18 @@ from tasks.models      import Task, Comment
 from tasks.views       import TaskViewSet
 from users.models      import User as _User # для аннотации
 
-User: type[_User] = get_user_model()
+User: type[_User] = get_user_model() # type: ignore
 
 
 
-class UserInfoSerializerTest(APITestCase):
+class UserInfoSerializerTest(CustomAPITestCase):
 	SECRET_FIELDS: list[str] = [
 		'password',
 	]
 
 	def setUp(self):
+		super().setUp()
+
 		self.user_1 = User.objects.create(
 			username = 'DebugUser 1',
 			password = '1234567890$',
@@ -45,18 +47,26 @@ class UserInfoSerializerTest(APITestCase):
 class TaskSerializerTest(CustomAPITestCase):
 	COMMENTS_FIELD_NAME: str = 'comments'
 
-	def test_many_doesnt_contains_comments_field(self):
-		"""
-		Проверка, что при many = True, в выходных данных нет комментариев.
-		"""
-
-		pass
-
-
 	def test_not_many_contains_comments_field(self):
 		"""
 		Проверка, что при many = False (по умолчанию), в выходных данных\
 		есть комментарии.
 		"""
 
-		pass
+		task = Task.objects.latest()
+
+		serialized_data = TaskSerializer(task).data
+
+		self.assertIn(self.COMMENTS_FIELD_NAME, serialized_data)
+
+
+	def test_many_doesnt_contains_comments_field(self):
+		"""
+		Проверка, что при many = True, в выходных данных нет комментариев.
+		"""
+
+		tasks = Task.objects.all()
+
+		serialized_data = TaskSerializer(tasks, many = True).data
+
+		self.assertNotIn(self.COMMENTS_FIELD_NAME, serialized_data)

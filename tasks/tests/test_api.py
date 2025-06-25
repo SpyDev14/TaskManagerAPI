@@ -13,27 +13,14 @@ from rest_framework.test     import APITestCase
 from rest_framework          import status
 
 from tasks.tests.utils import CookieJWTDebugClient, CustomAPITestCase, to_verbose_data
-from tasks.serializers import TaskSerializer, UserInfoSerializer
+from tasks.serializers import TaskSerializer, CommentSerializer
 from tasks.models      import Task, Comment
 from tasks.views       import TaskViewSet
 from users.models      import User as _User # для аннотации
 
-User: type[_User] = get_user_model()
+User: type[_User] = get_user_model() # type: ignore
 
 
-DUE_DATES: dict[str, datetime | None] = {
-	'never': None,
-
-	'in a month':    timezone.now() + timedelta(days = 30),
-	'this month':    timezone.now() + timedelta(days = 14),
-	'next week':     timezone.now() + timedelta(days = 7),
-	'tomorrow':      timezone.now() + timedelta(days = 1),
-	'today':         timezone.now().replace(hour = 23, minute = 59),
-	'in an 6 hours': timezone.now() + timedelta(hours = 6),
-	'hour ago':      timezone.now() - timedelta(hours = 1),
-	'yesterday':     timezone.now() - timedelta(days  = 1),
-	'week ago':      timezone.now() - timedelta(days  = 7),
-}
 
 class TaskAPITest(CustomAPITestCase):
 	# Только задачи
@@ -45,13 +32,25 @@ class TaskAPITest(CustomAPITestCase):
 
 	default_qs: QuerySet = TaskViewSet.queryset
 
+	DUE_DATES: dict[str, datetime | None] = {
+		'never': None,
+
+		'in a month':    timezone.now() + timedelta(days = 30),
+		'this month':    timezone.now() + timedelta(days = 14),
+		'next week':     timezone.now() + timedelta(days = 7),
+		'tomorrow':      timezone.now() + timedelta(days = 1),
+		'today':         timezone.now().replace(hour = 23, minute = 59),
+		'in an 6 hours': timezone.now() + timedelta(hours = 6),
+		'hour ago':      timezone.now() - timedelta(hours = 1),
+		'yesterday':     timezone.now() - timedelta(days  = 1),
+		'week ago':      timezone.now() - timedelta(days  = 7),
+	}
 
 	def setUp(self):
 		super().setUp()
 
 		self.tasks_list_url = reverse('task-list')
 		self.make_task_detail_url   = lambda task: reverse('task-detail',   args = [getattr(task, 'pk', task)])
-		self.make_comments_list_url = lambda task: reverse('task-comments', args = [getattr(task, 'pk', task)])
 
 		self.users_and_tasks_where_users_must_have_edit_permission = [
 			# User
@@ -384,8 +383,8 @@ class TaskAPITest(CustomAPITestCase):
 
 	def test_get_list_filtered_with_not_valid_value_in_is_completed(self):
 		"""
-Проверяет, что если передать в фильтрации в поле типа boolean строку "foo" - \
-сервер выдаст ошибку 400, а не пустой список.
+		Проверяет, что если передать в фильтрации в поле типа boolean строку "foo" - \
+		сервер выдаст ошибку 400, а не пустой список.
 		"""
 		for user in [self.pm_user, self.superuser]:
 			self.client.force_login(user)
@@ -543,7 +542,7 @@ class TaskAPITest(CustomAPITestCase):
 			'title': 'Task 3',
 			'priority': Task.Priority.MEDIUM,
 			'description': 'This is a new task',
-			'due_date': DUE_DATES['next week'],
+			'due_date': self.self.DUE_DATES['next week'],
 		}
 		expected_key: str = 'detail'
 
@@ -575,7 +574,7 @@ class TaskAPITest(CustomAPITestCase):
 			'title': 'Task 3',
 			'priority': Task.Priority.MEDIUM,
 			'description': 'This is a new task',
-			'due_date': DUE_DATES['next week'],
+			'due_date': self.DUE_DATES['next week'],
 		}
 
 
@@ -613,7 +612,7 @@ class TaskAPITest(CustomAPITestCase):
 				'title': '',
 				'priority': Task.Priority.MEDIUM,
 				'description': 'This is a new task',
-				'due_date': DUE_DATES['next week'],
+				'due_date': self.DUE_DATES['next week'],
 			}
 			expected_key: str = 'title'
 
@@ -647,7 +646,7 @@ class TaskAPITest(CustomAPITestCase):
 			'title': 'New task',
 			'priority': 'invalid',
 			'description': 'This is a new task',
-			'due_date': DUE_DATES['next week'],
+			'due_date': self.DUE_DATES['next week'],
 		}
 		expected_key: str = 'priority'
 
@@ -684,7 +683,7 @@ class TaskAPITest(CustomAPITestCase):
 				'title': 'Task 3',
 				'priority': Task.Priority.MEDIUM,
 				'description': 'This is a new task',
-				'due_date': DUE_DATES['next week'],
+				'due_date': self.DUE_DATES['next week'],
 				'created_by': self.user_3.pk,
 			}
 
@@ -717,7 +716,7 @@ class TaskAPITest(CustomAPITestCase):
 			'title': 'Task 3',
 			'priority': Task.Priority.MEDIUM,
 			'description': 'This is a new task',
-			'due_date': DUE_DATES['next week'],
+			'due_date': self.DUE_DATES['next week'],
 			'assigned_to': self.user_3.pk,
 		}
 		expected_user = self.user_3
@@ -750,7 +749,7 @@ class TaskAPITest(CustomAPITestCase):
 				'title': 'Task 3',
 				'priority': Task.Priority.MEDIUM,
 				'description': 'This is a new task',
-				'due_date': DUE_DATES['next week'],
+				'due_date': self.DUE_DATES['next week'],
 				'assigned_to': self.user_3.pk,
 			}
 			expected_user = self.user_3
@@ -791,7 +790,7 @@ class TaskAPITest(CustomAPITestCase):
 				'title': 'Task 3',
 				'priority': Task.Priority.MEDIUM,
 				'description': 'This is a new task',
-				'due_date': DUE_DATES['next week'],
+				'due_date': self.DUE_DATES['next week'],
 			}
 
 
@@ -811,7 +810,8 @@ class TaskAPITest(CustomAPITestCase):
 			self.assertEqual(new_task.assigned_to, None,
 				to_verbose_data(expected_user = None, assigned_to_task_user = new_task.assigned_to))
 
-# MARK: Updating
+	# MARK: Updating
+	# TODO: Нужно проверить, что другой regular user не может удалить чужую задачу
 	def test_update_from_anonymous(self):
 		"""
 		Проверка, что аноним не может изменить задачу.
@@ -979,6 +979,7 @@ class TaskAPITest(CustomAPITestCase):
 
 
 	# MARK: Deleting
+	# TODO: Нужно проверить, что другой regular user не может удалить чужую задачу
 	def test_delete_from_anonymous(self):
 		"""
 		Проверка, что аноним не может удалить задачу.
@@ -1070,3 +1071,182 @@ class TaskAPITest(CustomAPITestCase):
 			
 			self.assertFalse(Task.objects.filter(pk = task.pk).exists())
 			self.assertEqual(Task.objects.count(), initial_tasks_count - 1)
+
+# MARK: Comments Test
+class TaskCommentsAPITest(CustomAPITestCase):
+	def setUp(self):
+		super().setUp()
+
+		self.make_get_list_url   = lambda task: reverse('task-comment-list', args = [getattr(task, 'pk', task)])
+		self.make_get_detail_url = lambda task, comment: reverse('task-comment-detail', \
+									args = [getattr(task, 'pk', task), getattr(comment, 'pk', comment)])
+		
+		self.users_and_tasks_where_users_must_have_edit_permission = [
+			# User
+			(self.user_1, self.user_1_tasks['Task 1']),               # Owner
+			(self.user_2, self.pm_user_tasks['PM Task 1 for User2']), # Assigned
+
+			# PM
+			(self.pm_user, self.pm_user_tasks['PM Own Task 1']),           # Owner
+			(self.pm_user, self.superuser_tasks['Superuser Task for PM']), # Assigned
+
+			# Superuser
+			(self.superuser, self.superuser_tasks['Superuser Task 1']),     # Owner
+			(self.superuser, self.pm_user_tasks['PM Task 1 for Superuser']) # Assigned
+		]
+
+	# MARK: Get-list
+	def test_get_list_from_anonymous(self):
+		pass
+
+	def test_get_list(self):
+		pass
+
+	# MARK: Get-detail
+	def test_get_detail_from_anonymous(self):
+		pass
+
+	def test_get_detail(self):
+		pass
+
+	# MARK: Creating
+	def test_create_from_anonymous(self):
+		task = self.user_1_tasks['Task 1']
+		url = self.make_get_list_url(task=task)
+
+		initial_comments_count = Comment.objects.count()
+		initial_latest_comment = Comment.objects.latest()
+		data = {
+			'content': 'Cool task!'
+		}
+		expected_key = 'detail'
+
+		response: Response = self.client.post(url, data=data, content_type='application/json')
+
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+		self.assertIn(expected_key, response.data)
+
+		self.assertEqual(Comment.objects.count(),  initial_comments_count)
+		self.assertEqual(Comment.objects.latest(), initial_latest_comment)
+
+	def test_create(self):
+		task = self.user_1_tasks['Task 1']
+
+		for user in [self.superuser, self.pm_user, self.user_1]:
+			self.client.force_login(user)
+			url = self.make_get_list_url(task=task)
+
+			initial_comments_count = Comment.objects.count()
+			initial_latest_comment = Comment.objects.latest()
+			data = {
+				'content': 'Cool task!'
+			}
+
+			response: Response = self.client.post(url, data=data, content_type='application/json')
+
+			self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+			self.assertEqual(Comment.objects.count(),  initial_comments_count)
+			self.assertEqual(Comment.objects.latest(), initial_latest_comment)
+
+			new_comment = Comment.objects.latest()
+			expected_data = CommentSerializer(new_comment).data
+			self.assertEqual(response.data, expected_data, to_verbose_data(response.data, expected_data, here='Response Data & Expected Data'))
+
+	def test_create_with_void_content(self):
+		pass
+
+	def test_create_with_created_by_or_task_in_body(self):
+		pass
+
+	def test_create_on_none_exists_task(self):
+		pass
+
+	# MARK: Updating
+	def test_update_from_anonymous(self):
+		pass
+
+	def test_update(self):
+		pass
+
+	def test_update_with_another_user(self):
+		pass
+
+	def test_update_with_void_content(self):
+		pass
+
+	def test_update_with_created_by_or_task_in_body(self):
+		pass
+
+	# MARK: Deleting
+	def test_delete_from_anonymous(self):
+		task = self.user_1_tasks['Task 1']
+		user = self.user_1
+
+		comment = Comment.objects.filter(created_by = user, task = task).first()
+		url = self.make_get_detail_url(task = task, comment = comment)
+
+		initial_comments_count = Comment.objects.count()
+		expected_key: str = 'detail'
+
+
+		response: Response = self.client.delete(url)
+
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+		self.assertIn(expected_key, response.data)
+
+		self.assertEqual(Comment.objects.count(), initial_comments_count)
+		self.assertTrue(Comment.objects.filter(pk = comment.pk).exists())
+
+
+	def test_delete(self):
+		"""
+		Проверка, что пользователь может оставить комментарий, если он владелец, назначенный, или pm\su
+		"""
+
+		for user, task in self.users_and_tasks_where_users_must_have_edit_permission:
+			self.client.force_login(user)
+			comment = Comment.objects.create(
+				created_by = user,
+				task = task,
+				content = 'New comment',
+			)
+			url = self.make_get_detail_url(task = task, comment = comment)
+
+			initial_comments_count = Comment.objects.count()
+
+
+			response: Response = self.client.delete(url)
+
+			self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+			self.assertIsNone(response.data)
+
+			self.assertEqual(Comment.objects.count(), initial_comments_count - 1)
+			self.assertFalse(Comment.objects.filter(pk = comment.pk).exists())
+
+
+	def test_delete_with_another_user(self):
+		"""
+		Проверка, что пользователь не может удалить чужой комментарий.
+		"""
+		task = self.user_3_tasks['Task 1']
+
+		for user in [self.pm_user, self.superuser, self.user_1]:
+			self.client.force_login(user)
+			comment = Comment.objects.create(
+				created_by = self.user_3,
+				task = task,
+				content = 'New comment'
+			)
+			url = self.make_get_detail_url(task = task, comment = comment)
+
+			initial_comments_count = Comment.objects.count()
+
+
+			response: Response = self.client.delete(url)
+
+			self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+			self.assertIsNone(response.data, to_verbose_data(response = response.data, user = user))
+
+			self.assertEqual(Comment.objects.count(), initial_comments_count)
+			self.assertTrue(Comment.objects.filter(pk = comment.pk).exists())
