@@ -15,10 +15,179 @@ from django.utils            import timezone
 from tasks.models import Task, Comment
 from tasks.views  import TaskViewSet
 from users.models import User as _User # для аннотации
-from users        import local_settings
+from users        import _settings
 
 User: type[_User] = get_user_model()
 
+
+
+_COLORS: dict[str, str] = {
+	'red':     '\033[31m',
+	'green':   '\033[32m',
+	'yellow':  '\033[33m',
+	'blue':    '\033[34m',
+	'magenta': '\033[35m',
+	'cyan':    '\033[36m',
+
+	'light red':     '\033[1;31m',
+	'light green':   '\033[1;32m',
+	'light yellow':  '\033[1;33m',
+	'light blue':    '\033[1;34m',
+	'light magenta': '\033[1;35m',
+	'light cyan':    '\033[1;36m',
+
+	'reset': '\033[0m'
+}
+
+def to_verbose_data(
+	*args,
+	here: Literal[
+		'Response Data & Expected Data',
+		'Response Data, Expected Data & User',
+		'User, Response Data & Expected Data'
+	] | None = None,
+	do_not_serialize_fields: list[str] | Literal['__all__'] = [],
+	**kwargs) -> str | None:
+	"""
+	Автоматически попробует взять данные из аттрибута data
+	"""
+
+	if not args and not kwargs:
+		return None
+	
+	warning_messages: list[str] = []
+	
+	# для обратной совместимости
+	legacy_names_mapping: dict = {
+		True: 'Response Data & Expected Data',
+	}
+
+	if here in legacy_names_mapping:
+		here = legacy_names_mapping[here]
+		warning_messages.append(f'here использует более не поддерживаемое значение!')
+
+	data_for_performing: dict[str, Any] = {}
+
+	header_renames_variants: dict[str | None, list] = {
+		'Response Data & Expected Data':       ['Response data', 'Expected data'],
+		'Response Data, Expected Data & User': ['Response data', 'Expected data', 'User'],
+		'User, Response Data & Expected Data': ['User', 'Response data', 'Expected data'],
+	}
+
+	for i, arg in enumerate(args):
+		header_renames = header_renames_variants.get(here, [])
+
+		if here not in header_renames_variants:
+			warning_messages.append(f'Значение here \'{here}\' не предусмотренно!')
+		
+		header = f'Element #{i+1}'
+
+		if i < len(header_renames):
+			header = header_renames[i]
+
+		data_for_performing[header] = arg
+	data_for_performing.update(kwargs)
+
+
+	TOKEN_COLORS = {
+		"key":    _COLORS['light blue'],
+		"string": _COLORS['light red'],
+		"number": _COLORS['light green'],
+		"bool":   _COLORS['light cyan'],
+		"null":   _COLORS['light magenta'],
+	}
+
+	data_for_print: dict[str, str] = {}
+	for header, value in data_for_performing.items():
+		if hasattr(value, 'data'):
+			value = value.data
+			warning_messages.append(
+				'Был передан сам response или serializer (объект с аттрибутом'
+				' data), в то время как ожидалась сама data!')
+
+		try:
+			perform_serialization: bool = (
+				(header not in do_not_serialize_fields) and
+				(do_not_serialize_fields != '__all__')
+			)
+
+			data = (
+				json.dumps(value, indent = 4, ensure_ascii = False)
+				if perform_serialization
+				else value
+			)
+			if len(data) > 3000:
+				data = (
+					json.dumps(value, ensure_ascii = False)
+					if perform_serialization
+					else value
+				)
+		except TypeError:
+			data = repr(value)
+			data = re.sub(
+				r'<(\w+):\s', 
+				f'<{_COLORS['green']}\\1{_COLORS['reset']}: ', 
+				data
+			)
+
+		# Обработка ключей (формат '"key":')
+		data = re.sub(
+			r'\"(\w+)\"\s*:', 
+			f'{TOKEN_COLORS["key"]}"\\1"{_COLORS["reset"]}:', 
+			data
+		)
+		
+		# Обработка строк (формат ': "value"')
+		data = re.sub(
+			r':\s*\"(.*?)\"', 
+			f': {TOKEN_COLORS["string"]}"\\1"{_COLORS["reset"]}', 
+			data
+		)
+		
+		# Обработка чисел (формат ': 123')
+		data = re.sub(
+			r'\"\s*:\s*([0-9]+(\.[0-9]+)?)', 
+			f'": {TOKEN_COLORS["number"]}\\1{_COLORS["reset"]}', 
+			data
+		)			
+		
+		# Обработка true/false/null
+		true_false_null_mapping: dict[str, str] = {
+			'true':  f'{TOKEN_COLORS["bool"]}true{  _COLORS["reset"]}',
+			'false': f'{TOKEN_COLORS["bool"]}false{ _COLORS["reset"]}',
+			'null':  f'{TOKEN_COLORS["null"]}null{  _COLORS["reset"]}',
+		}
+
+		data = data.replace(": true",  f': {true_false_null_mapping["true"]}')
+		data = data.replace(": false", f': {true_false_null_mapping["false"]}')
+		data = data.replace(": null",  f': {true_false_null_mapping["null"]}')
+
+
+		# Обработка случаев, когда это был не словарь и не список
+		if data.isdigit():
+			data = f'{TOKEN_COLORS["number"]}{data}{_COLORS['reset']}'
+
+		# Если это строка
+		data = re.sub(
+			r'^\"([\s\S]*)\"$', 
+			f'{TOKEN_COLORS["string"]}"\\1"{_COLORS["reset"]}', 
+			data
+		)
+
+		data = true_false_null_mapping.get(data, data)
+
+		data_for_print[f'\033[1;34m{header.replace('_', ' ').capitalize()}:\033[0m'] = f'{data}\033[0m'
+
+
+	exit_string_parts: list[str] = []
+	for header, data in data_for_print.items():
+		exit_string_parts.append('\n')
+		exit_string_parts.append(header)
+		exit_string_parts.append(data)
+
+	assembled_warning_messages: str = '\n'.join([f'{_COLORS["light yellow"]}Warning! {warning}{_COLORS['reset']}' for warning in warning_messages])
+	assembled_warning_messages = f'\n{assembled_warning_messages}' if assembled_warning_messages else ''
+	return assembled_warning_messages + '\n'.join(exit_string_parts)
 
 
 class CookieJWTDebugClient(APIClient):
@@ -27,8 +196,10 @@ class CookieJWTDebugClient(APIClient):
 
 		refresh = RefreshToken.for_user(user)
 
-		self.cookies[local_settings.ACCESS_TOKEN_COOKIE_NAME]  = str(refresh.access_token)
-		self.cookies[local_settings.REFRESH_TOKEN_COOKIE_NAME] = str(refresh)
+		self.cookies[_settings.ACCESS_TOKEN_COOKIE_NAME]  = str(refresh.access_token)
+		self.cookies[_settings.REFRESH_TOKEN_COOKIE_NAME] = str(refresh)
+
+		
 
 class CustomAPITestCase(APITestCase):
 	client_class = CookieJWTDebugClient
@@ -52,7 +223,7 @@ class CustomAPITestCase(APITestCase):
 			User.objects.create(
 				username = f'Regular User {i}',
 				password = 'password12345',
-				role = User.Role.PROJECT_MANAGER,
+				role = User.Role.REGULAR_USER,
 			) for i in range(1, 4) # 1, 2, 3
 		]
 
@@ -369,172 +540,3 @@ class CustomAPITestCase(APITestCase):
 				],
 			],
 		]
-
-
-
-_COLORS: dict[str, str] = {
-	'red':     '\033[31m',
-	'green':   '\033[32m',
-	'yellow':  '\033[33m',
-	'blue':    '\033[34m',
-	'magenta': '\033[35m',
-	'cyan':    '\033[36m',
-
-	'light red':     '\033[1;31m',
-	'light green':   '\033[1;32m',
-	'light yellow':  '\033[1;33m',
-	'light blue':    '\033[1;34m',
-	'light magenta': '\033[1;35m',
-	'light cyan':    '\033[1;36m',
-
-	'reset': '\033[0m'
-}
-
-def to_verbose_data(
-	*args,
-	here: Literal[
-		'Response Data & Expected Data',
-		'Response Data, Expected Data & User',
-		'User, Response Data & Expected Data'
-	] | None = None,
-	do_not_serialize_fields: list[str] | Literal['__all__'] = [],
-	**kwargs) -> str | None:
-	"""
-	Автоматически попробует взять данные из аттрибута data
-	"""
-
-	if not args and not kwargs:
-		return None
-	
-	warning_messages: list[str] = []
-	
-	# для обратной совместимости
-	legacy_names_mapping: dict = {
-		True: 'Response Data & Expected Data',
-	}
-
-	if here in legacy_names_mapping:
-		here = legacy_names_mapping[here]
-		warning_messages.append(f'here использует более не поддерживаемое значение!')
-
-	data_for_performing: dict[str, Any] = {}
-
-	header_renames_variants: dict[str | None, list] = {
-		'Response Data & Expected Data':       ['Response data', 'Expected data'],
-		'Response Data, Expected Data & User': ['Response data', 'Expected data', 'User'],
-		'User, Response Data & Expected Data': ['User', 'Response data', 'Expected data'],
-	}
-
-	for i, arg in enumerate(args):
-		header_renames = header_renames_variants.get(here, [])
-
-		if here not in header_renames_variants:
-			warning_messages.append(f'Значение here \'{here}\' не предусмотренно!')
-		
-		header = f'Element #{i+1}'
-
-		if i < len(header_renames):
-			header = header_renames[i]
-
-		data_for_performing[header] = arg
-	data_for_performing.update(kwargs)
-
-
-	TOKEN_COLORS = {
-		"key":    _COLORS['light blue'],
-		"string": _COLORS['light red'],
-		"number": _COLORS['light green'],
-		"bool":   _COLORS['light cyan'],
-		"null":   _COLORS['light magenta'],
-	}
-
-	data_for_print: dict[str, str] = {}
-	for header, value in data_for_performing.items():
-		if hasattr(value, 'data'):
-			value = value
-			warning_messages.append(
-				'Был передан сам response или serializer (объект с аттрибутом'
-				' data), в то время как ожидалась сама data!')
-
-		try:
-			perform_serialization: bool = (
-				(header not in do_not_serialize_fields) and
-				(do_not_serialize_fields != '__all__')
-			)
-
-			data = (
-				json.dumps(value, indent = 4, ensure_ascii = False)
-				if perform_serialization
-				else value
-			)
-			if len(data) > 3000:
-				data = (
-					json.dumps(value, ensure_ascii = False)
-					if perform_serialization
-					else value
-				)
-		except TypeError:
-			data = repr(value)
-			data = re.sub(
-				r'<(\w+):\s', 
-				f'<{_COLORS['green']}\\1{_COLORS['reset']}: ', 
-				data
-			)
-
-		# Обработка ключей (формат '"key":')
-		data = re.sub(
-			r'\"(\w+)\"\s*:', 
-			f'{TOKEN_COLORS["key"]}"\\1"{_COLORS["reset"]}:', 
-			data
-		)
-		
-		# Обработка строк (формат ': "value"')
-		data = re.sub(
-			r':\s*\"(.*?)\"', 
-			f': {TOKEN_COLORS["string"]}"\\1"{_COLORS["reset"]}', 
-			data
-		)
-		
-		# Обработка чисел (формат ': 123')
-		data = re.sub(
-			r'\"\s*:\s*([0-9]+(\.[0-9]+)?)', 
-			f'": {TOKEN_COLORS["number"]}\\1{_COLORS["reset"]}', 
-			data
-		)			
-		
-		# Обработка true/false/null
-		true_false_null_mapping: dict[str, str] = {
-			'true':  f'{TOKEN_COLORS["bool"]}true{  _COLORS["reset"]}',
-			'false': f'{TOKEN_COLORS["bool"]}false{ _COLORS["reset"]}',
-			'null':  f'{TOKEN_COLORS["null"]}null{  _COLORS["reset"]}',
-		}
-
-		data = data.replace(": true",  f': {true_false_null_mapping["true"]}')
-		data = data.replace(": false", f': {true_false_null_mapping["false"]}')
-		data = data.replace(": null",  f': {true_false_null_mapping["null"]}')
-
-
-		# Обработка случаев, когда это был не словарь и не список
-		if data.isdigit():
-			data = f'{TOKEN_COLORS["number"]}{data}{_COLORS['reset']}'
-
-		# Если это строка
-		data = re.sub(
-			r'^\"([\s\S]*)\"$', 
-			f'{TOKEN_COLORS["string"]}"\\1"{_COLORS["reset"]}', 
-			data
-		)
-
-		data = true_false_null_mapping.get(data, data)
-
-		data_for_print[f'\033[1;34m{header.replace('_', ' ').capitalize()}:\033[0m'] = f'{data}\033[0m'
-
-
-	exit_string_parts: list[str] = []
-	for header, data in data_for_print.items():
-		exit_string_parts.append('\n')
-		exit_string_parts.append(header)
-		exit_string_parts.append(data)
-
-	assembled_warning_messages: str = '\n'.join([f'{_COLORS["light yellow"]}Warning! {warning}{_COLORS['reset']}' for warning in warning_messages])
-	return f'{assembled_warning_messages}{'\n'.join(exit_string_parts)}'

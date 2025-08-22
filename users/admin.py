@@ -10,7 +10,7 @@ User: type[_User] = get_user_model()
 
 
 class CustomUserAdmin(UserAdmin):
-	list_display = ('id', ) + UserAdmin.list_display + ('get_role_display',)
+	list_display = ('id', ) + UserAdmin.list_display + ('role', 'last_login')
 	list_display_links = ['username']
 	ordering = ['id']
 
@@ -19,12 +19,8 @@ class CustomUserAdmin(UserAdmin):
 	)
 
 	add_fieldsets = UserAdmin.add_fieldsets + (
-        (loc('Роль пользователя'), {'fields': ('role',)}),
-    )
-
-	def get_role_display(self, obj: _User):
-		return obj.get_role_display()
-	get_role_display.short_description = loc('Роль')
+		(loc('Роль пользователя'), {'fields': ('role',)}),
+	)
 
 
 admin.site.register(User, CustomUserAdmin)

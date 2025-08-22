@@ -6,7 +6,7 @@ from tasks import views
 
 
 task_router = DefaultRouter()
-task_router.register('tasks', views.TaskViewSet, basename = 'task')
+task_router.register('tasks', views.TaskViewSet, basename = 'tasks')
 
 task_comments_router = NestedDefaultRouter(
 	parent_router = task_router,

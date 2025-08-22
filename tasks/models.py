@@ -21,7 +21,7 @@ class Task(models.Model):
 		HIGH   = ('high',   'High')
 
 	# Владельца можно поменять! В теории. Ох уж этот django, ну явно же editable = False поле!
-	# Нет, по мнению разработчиков, editable = False ИСКЛЮЧИТЕЛЬНО для сугубо технических полей.
+	# Нет, по мнению разработчиков, editable = False ИСКЛЮЧИТЕЛЬНО для сугубо-технических полей.
 	# Под этим подразумевается, что формы с editable = False отказываются работать на уровне
 	# внутренней assert проверки.
 	created_by = models.ForeignKey(
@@ -46,7 +46,6 @@ class Task(models.Model):
 	)
 
 	class Meta:
-		# ordering = ['-id']
 		get_latest_by = 'id'
 
 
@@ -63,6 +62,7 @@ class Comment(models.Model):
 
 	class Meta:
 		ordering = ['-created_at']
+		get_latest_by = 'id'
 
 	def __str__(self) -> str:
 		return f'Comment under task "{self.task}" from {self.created_by}'

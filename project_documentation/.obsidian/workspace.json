@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Technical order.md",
+                "file": "Заметки.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Technical order"
+              "title": "Заметки"
             }
           }
         ]
@@ -34,19 +34,6 @@
         "id": "0d28a2b6ca21d83b",
         "type": "tabs",
         "children": [
-          {
-            "id": "5cccbf99c3e53d93",
-            "type": "leaf",
-            "state": {
-              "type": "file-explorer",
-              "state": {
-                "sortOrder": "alphabetical",
-                "autoReveal": false
-              },
-              "icon": "lucide-folder-closed",
-              "title": "Файловый менеджер"
-            }
-          },
           {
             "id": "d604f2722ddbd52c",
             "type": "leaf",
@@ -73,13 +60,26 @@
               "icon": "lucide-bookmark",
               "title": "Закладки"
             }
+          },
+          {
+            "id": "0b05078ce3ff912c",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Файловый менеджер"
+            }
           }
-        ]
+        ],
+        "currentTab": 2
       }
     ],
     "direction": "horizontal",
-    "width": 200,
-    "collapsed": true
+    "width": 200
   },
   "right": {
     "id": "35e1104523c48f13",
@@ -171,8 +171,8 @@
   },
   "active": "6cdf275aa991a460",
   "lastOpenFiles": [
-    "Test check's.md",
     "Technical order.md",
+    "Test check's.md",
     "Заметки.md",
     "Pasted image 20250529170126.png",
     "Pasted image 20250529091530.png",

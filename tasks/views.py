@@ -54,6 +54,9 @@ class CommentViewSet(
 		)
 
 class TaskViewSet(ModelViewSet):
+	# Базовый QS, дополняется в get_queryset
+	queryset = Task.objects.select_related('created_by', 'assigned_to')
+
 	serializer_class = TaskSerializer
 	permission_classes = [TASK_PERMISSION]
 	filter_backends  = [TaskOrderingFilter, DjangoFilterBackend, SearchFilter]
@@ -68,12 +71,9 @@ class TaskViewSet(ModelViewSet):
 	# Вызывает ошибку 404 вместо 403 при обращении к чужой задаче. С точки зрения 
 	# безопасности, так даже лучше.
 	def get_queryset(self):
+		# Обычные пользователи видят только свои задачи и т.д.
 		q_filter = get_task_qs_filter_with_permissions(self)
-		qs = (
-			Task.objects
-				.select_related('created_by', 'assigned_to')
-				.filter(q_filter)
-		)
+		qs = self.queryset.filter(q_filter)
 
 
 		self.kwargs: dict
@@ -88,7 +88,6 @@ class TaskViewSet(ModelViewSet):
 			)
 		
 			qs = qs.prefetch_related(prefetch_comments)
-
 
 		return qs
 

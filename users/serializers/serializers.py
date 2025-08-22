@@ -5,7 +5,7 @@ from rest_framework                          import serializers
 
 from users.serializers.fields import CookieSourceCharField
 from users.models             import User as _User # для аннотации
-from users                    import local_settings
+from users                    import _settings
 
 __all__ = [
 	'UserRegisterSerializer',
@@ -41,7 +41,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
 class CookieTokenRefreshSerializer(TokenRefreshSerializer):
 	refresh = CookieSourceCharField(
-		target_key = local_settings.REFRESH_TOKEN_COOKIE_NAME,
+		target_key = _settings.REFRESH_TOKEN_COOKIE_NAME,
 		write_only = True
 	)
 

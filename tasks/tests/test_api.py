@@ -13,7 +13,7 @@ from rest_framework.test     import APITestCase
 from rest_framework          import status
 
 from tasks.tests.utils import CookieJWTDebugClient, CustomAPITestCase, to_verbose_data
-from tasks.serializers import TaskSerializer, CommentSerializer
+from tasks.serializers import TaskSerializer, CommentSerializer, UserInfoSerializer
 from tasks.models      import Task, Comment
 from tasks.views       import TaskViewSet
 from users.models      import User as _User # для аннотации
@@ -30,7 +30,7 @@ class TaskAPITest(CustomAPITestCase):
 
 	COMMENTS_FIELD_NAME: str = 'comments'
 
-	default_qs: QuerySet = TaskViewSet.queryset
+	default_qs: QuerySet = Task.objects.all()
 
 	DUE_DATES: dict[str, datetime | None] = {
 		'never': None,
@@ -49,8 +49,8 @@ class TaskAPITest(CustomAPITestCase):
 	def setUp(self):
 		super().setUp()
 
-		self.tasks_list_url = reverse('task-list')
-		self.make_task_detail_url   = lambda task: reverse('task-detail',   args = [getattr(task, 'pk', task)])
+		self.tasks_list_url = reverse('tasks-list')
+		self.make_task_detail_url   = lambda task: reverse('tasks-detail',   args = [getattr(task, 'pk', task)])
 
 		self.users_and_tasks_where_users_must_have_edit_permission = [
 			# User
@@ -78,7 +78,7 @@ class TaskAPITest(CustomAPITestCase):
 
 	def test_get_list_from_regular_user(self):
 		"""
-		Проверяет, что при запросе regular_user на task-list в ответе будут только те задачи, где
+		Проверяет, что при запросе regular_user на task-list в ответе будут только те задачи, где\
 		он - assigned_to / created_by.
 		"""
 		user = self.user_1
@@ -542,7 +542,7 @@ class TaskAPITest(CustomAPITestCase):
 			'title': 'Task 3',
 			'priority': Task.Priority.MEDIUM,
 			'description': 'This is a new task',
-			'due_date': self.self.DUE_DATES['next week'],
+			'due_date': self.DUE_DATES['next week'],
 		}
 		expected_key: str = 'detail'
 
@@ -592,10 +592,17 @@ class TaskAPITest(CustomAPITestCase):
 			to_verbose_data(response.data, expected_data, here = 'Response Data & Expected Data'))
 		
 		self.assertEqual(new_task.created_by, user,
-			to_verbose_data(this_user = user, task_owner = new_task.created_by))
+			to_verbose_data(
+				this_user = user,
+				task_owner = new_task.created_by,
+				task = TaskSerializer(new_task)))
 		
 		self.assertEqual(new_task.assigned_to, user,
-			to_verbose_data(this_user = user, assigned_to_task_user = new_task.assigned_to))
+			to_verbose_data(
+				this_user = user,
+				assigned_to_task_user = new_task.assigned_to,
+				task = TaskSerializer(new_task)
+			))
 
 
 	def test_create_with_void_title(self):
@@ -771,8 +778,8 @@ class TaskAPITest(CustomAPITestCase):
 			self.assertEqual(new_task.created_by, user,
 				to_verbose_data(this_user = user, task_owner = new_task.created_by))
 			
-			self.assertEqual(new_task.assigned_to, user,
-				to_verbose_data(expected_user = expected_user, assigned_to_task_user = new_task.assigned_to))
+			self.assertEqual(new_task.assigned_to, expected_user,
+				to_verbose_data(expected_user = UserInfoSerializer(expected_user), user = UserInfoSerializer(user), assigned_to_task_user = new_task.assigned_to))
 		
 
 	def test_create_without_assigned_to_in_data_from_pm_or_superuser(self):
@@ -1077,8 +1084,8 @@ class TaskCommentsAPITest(CustomAPITestCase):
 	def setUp(self):
 		super().setUp()
 
-		self.make_get_list_url   = lambda task: reverse('task-comment-list', args = [getattr(task, 'pk', task)])
-		self.make_get_detail_url = lambda task, comment: reverse('task-comment-detail', \
+		self.make_get_list_url   = lambda task: reverse('task-comments-list', args = [getattr(task, 'pk', task)])
+		self.make_get_detail_url = lambda task, comment: reverse('task-comments-detail', \
 									args = [getattr(task, 'pk', task), getattr(comment, 'pk', comment)])
 		
 		self.users_and_tasks_where_users_must_have_edit_permission = [
@@ -1144,10 +1151,10 @@ class TaskCommentsAPITest(CustomAPITestCase):
 
 			response: Response = self.client.post(url, data=data, content_type='application/json')
 
-			self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+			self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-			self.assertEqual(Comment.objects.count(),  initial_comments_count)
-			self.assertEqual(Comment.objects.latest(), initial_latest_comment)
+			self.assertEqual(Comment.objects.count(),  initial_comments_count + 1)
+			self.assertNotEqual(Comment.objects.latest(), initial_latest_comment)
 
 			new_comment = Comment.objects.latest()
 			expected_data = CommentSerializer(new_comment).data
@@ -1241,12 +1248,16 @@ class TaskCommentsAPITest(CustomAPITestCase):
 			url = self.make_get_detail_url(task = task, comment = comment)
 
 			initial_comments_count = Comment.objects.count()
+			expected_data: dict = {
+				"detail": "У вас недостаточно прав для выполнения данного действия."
+			}
 
 
 			response: Response = self.client.delete(url)
 
 			self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-			self.assertIsNone(response.data, to_verbose_data(response = response.data, user = user))
+			self.assertEqual(response.data, expected_data,
+				to_verbose_data(response.data, expected_data, user, here='Response Data, Expected Data & User'))
 
 			self.assertEqual(Comment.objects.count(), initial_comments_count)
 			self.assertTrue(Comment.objects.filter(pk = comment.pk).exists())
