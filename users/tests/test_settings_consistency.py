@@ -1,12 +1,12 @@
 from django.test import TestCase
-from django.conf import settings
+from django.conf import settings as django_settings
 
-from users import local_settings
+from users import _settings
 
 
-class LocalSettings(TestCase):
+class LocalSettingsTest(TestCase):
 	def setUp(self):
-		self.SIMPLE_JWT: dict = settings.SIMPLE_JWT
+		self.SIMPLE_JWT: dict = django_settings.SIMPLE_JWT
 
 	def test_cookie_params_consistency(self):
 		SIMPLE_JWT: dict = self.SIMPLE_JWT
@@ -24,17 +24,17 @@ class LocalSettings(TestCase):
 			
 			self.assertEqual(
 				SIMPLE_JWT[key],
-				local_settings.TOKEN_COOKIE_PARAMS[testing_keys_mapping[key]]
+				_settings.TOKEN_COOKIE_PARAMS[testing_keys_mapping[key]]
 			)
 
 	
 	def test_cookie_token_names(self):
 		self.assertEqual(
 			self.SIMPLE_JWT.get('AUTH_COOKIE'),
-			local_settings.ACCESS_TOKEN_COOKIE_NAME
+			_settings.ACCESS_TOKEN_COOKIE_NAME
 		)
 
 		self.assertEqual(
 			self.SIMPLE_JWT.get('AUTH_COOKIE_REFRESH'),
-			local_settings.REFRESH_TOKEN_COOKIE_NAME
+			_settings.REFRESH_TOKEN_COOKIE_NAME
 		)

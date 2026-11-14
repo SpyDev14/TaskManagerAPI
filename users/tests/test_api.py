@@ -1,35 +1,27 @@
 from copy import copy
 import json
 
-from django.utils.translation import gettext_lazy as loc
 from django.contrib.auth      import get_user_model
-from django.http.response     import HttpResponse
 from django.urls              import reverse
 from rest_framework.response  import Response
 from rest_framework.test      import APITestCase
 from rest_framework           import status
 
-from users.tests.debug_client import CookieJWTDebugClient
+from tasks.tests.utils        import CookieJWTDebugClient
 from users.models             import User as _User # для аннотации
-from users                    import local_settings as _settings
+from users                    import _settings
 
 User: type[_User] = get_user_model()
-
-
-import json
-def to_verbose_data(data) -> str:
-	if not data:
-		return '>Data is None'
 
 
 class UserAPITest(APITestCase):
 	client_class = CookieJWTDebugClient
 
 	def setUp(self):
-		self.user_password = 'HoleraFredyFazbear'
-		self.user = User.objects.create_user(
+		# Здесь обычный create, для оптимизации времени прохождения теста (очень долго через create_user)
+		self.user = User.objects.create(
 			username = 'FredyFasbear',
-			password = self.user_password,
+			password = 'HoleraFredyFazbear',
 			email = 'fredyfazbear@gmail.com',
 			role = str(User.Role.PROJECT_MANAGER)
 		)
@@ -166,11 +158,26 @@ class UserAPITest(APITestCase):
 		self.assertEqual(User.objects.last().username, 'FredyFasbearLLC')
 
 	def test_login(self):
+		password: str = '12345678$'
+		user1 = User.objects.create_user(
+			username = 'UserForTestLogIn',
+			password = password,
+			email = 'debug@gmail.com',
+			role = str(User.Role.PROJECT_MANAGER)
+		)
+
+		user2 = User.objects.create_user(
+			username = 'UserForTestLogIn2',
+			password = password,
+			email = 'debug2@gmail.com',
+			role = str(User.Role.REGULAR_USER)
+		)
+
 		# вход анонима в уч запись с неправильным паролем
 		response = self.client.post(
 			self.token_pair_url,
 			{
-				'username': self.user.username,
+				'username': user1.username,
 				'password': 'WRONG'
 			},
 			content_type = 'application/json'
@@ -190,8 +197,8 @@ class UserAPITest(APITestCase):
 		response = self.client.post(
 			self.token_pair_url,
 			{
-				'username': self.user.username,
-				'password': self.user_password
+				'username': user1.username,
+				'password': password
 			},
 			content_type = 'application/json'
 		)
@@ -209,7 +216,7 @@ class UserAPITest(APITestCase):
 		response = self.client.post(
 			self.token_pair_url,
 			{
-				'username': self.user2.username,
+				'username': user2.username,
 				'password': 'WRONG'
 			},
 			content_type = 'application/json'
@@ -227,8 +234,8 @@ class UserAPITest(APITestCase):
 		response = self.client.post(
 			self.token_pair_url,
 			{
-				'username': self.user.username,
-				'password': self.user_password
+				'username': user2.username,
+				'password': password
 			},
 			content_type = 'application/json'
 		)
